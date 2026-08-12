@@ -1,0 +1,2 @@
+com.czetsuyatech.nerv.event.sqs.autoconfigure.NervEventSqsAutoConfiguration
+com.czetsuyatech.nerv.event.sqs.autoconfigure.NervEventSqsConsumerAutoConfiguration

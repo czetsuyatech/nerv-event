@@ -1,0 +1,2 @@
+com.czetsuyatech.nerv.event.kafka.autoconfigure.NervEventKafkaAutoConfiguration
+com.czetsuyatech.nerv.event.kafka.autoconfigure.NervEventKafkaConsumerAutoConfiguration

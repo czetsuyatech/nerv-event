@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.czetsuyatech.nerv</groupId>
+    <artifactId>nerv-event</artifactId>
+    <version>1.0.0</version>
+  </parent>
+  <artifactId>nerv-event-spring-boot-starter</artifactId>
+  <name>Nerv Event Spring Boot Starter</name>
+  <description>Spring Boot starter for the standard Nerv Event infrastructure.</description>
+  <dependencies>
+    <dependency><groupId>com.czetsuyatech.nerv</groupId><artifactId>nerv-event-spring</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.czetsuyatech.nerv</groupId><artifactId>nerv-event-persistence-jpa</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.czetsuyatech.nerv</groupId><artifactId>nerv-event-kafka</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.czetsuyatech.nerv</groupId><artifactId>nerv-event-sqs</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.czetsuyatech.nerv</groupId><artifactId>nerv-event-operations</artifactId><version>${project.version}</version><scope>test</scope></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>
+  </dependencies>
+</project>
