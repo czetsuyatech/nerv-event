@@ -706,7 +706,8 @@ class NervEventAutoConfigurationTest {
           ) {
             throw new UnsupportedOperationException();
           }
-        }
+        },
+        List.of()
     );
   }
 

@@ -6,7 +6,7 @@
 
   <groupId>com.czetsuyatech.nerv</groupId>
   <artifactId>nerv-event</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
   <packaging>pom</packaging>
   <name>Nerv Event</name>
   <description>Broker-neutral event infrastructure foundation.</description>

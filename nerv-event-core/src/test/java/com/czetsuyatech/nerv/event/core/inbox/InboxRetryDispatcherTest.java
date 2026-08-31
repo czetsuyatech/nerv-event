@@ -445,7 +445,8 @@ class InboxRetryDispatcherTest {
     private RecordingConsumerDispatcher(ThrowingConsumer action) {
       super(
           new EventHandlerRegistry(List.of()),
-          new NoOpEventDeserializer()
+          new NoOpEventDeserializer(),
+          List.of()
       );
       this.action = action;
     }

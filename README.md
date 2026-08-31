@@ -69,7 +69,7 @@ See [Getting Started](docs/getting-started.md), [Publishing](docs/publishing.md)
 
 ```text
 Application -> EventPublisher -> Outbox -> OutboxDispatcher -> Kafka / SQS
-Kafka / SQS -> consumer adapter -> Inbox -> ConsumerDispatcher -> EventHandler<T>
+Kafka / SQS -> consumer adapter -> Inbox -> ConsumerDispatcher -> EventHandlerInterceptor chain -> EventHandler<T>
 ```
 
 The detailed module and lifecycle view is in [Architecture](docs/architecture.md).

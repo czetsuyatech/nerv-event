@@ -12,18 +12,23 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.czetsuyatech.nerv.event.consumer.EventHandler;
+import com.czetsuyatech.nerv.event.consumer.EventHandlerInterceptor;
 import com.czetsuyatech.nerv.event.core.consumer.ConsumerDispatcher;
 import com.czetsuyatech.nerv.event.core.consumer.ConsumerMessage;
 import com.czetsuyatech.nerv.event.core.consumer.DefaultInboxFailureClassifier;
+import com.czetsuyatech.nerv.event.core.consumer.EventHandlerRegistry;
 import com.czetsuyatech.nerv.event.core.inbox.InboxEvent;
 import com.czetsuyatech.nerv.event.core.inbox.InboxRegistration;
 import com.czetsuyatech.nerv.event.core.inbox.InboxService;
 import com.czetsuyatech.nerv.event.core.inbox.InboxRetryPolicy;
 import com.czetsuyatech.nerv.event.core.inbox.InboxStatus;
 import com.czetsuyatech.nerv.event.core.serialization.SerializedPayload;
+import com.czetsuyatech.nerv.event.core.serialization.EventDeserializer;
 import com.czetsuyatech.nerv.event.exception.EventRetryableException;
 import com.czetsuyatech.nerv.event.kafka.producer.KafkaBrokerProducer;
 import com.czetsuyatech.nerv.event.model.EventId;
+import com.czetsuyatech.nerv.event.model.EventMessage;
 import com.czetsuyatech.nerv.event.observability.ConsumerMetrics;
 import com.czetsuyatech.nerv.event.observability.ConsumerMetrics.ConsumerHandlerResult;
 import com.czetsuyatech.nerv.event.observability.ConsumerMetrics.ConsumerOutcome;
@@ -35,6 +40,7 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.junit.jupiter.api.Test;
@@ -127,6 +133,74 @@ class KafkaConsumerAdapterTest {
   }
 
   @Test
+  void runsTheInterceptorAroundTheHandlerAfterInboxClaimAndBeforeProcessedOutcome() {
+    List<String> calls = new ArrayList<>();
+    EventHandler<String> handler = handler(calls);
+    EventHandlerInterceptor interceptor = (event, chain) -> {
+      calls.add("before");
+      try {
+        chain.proceed();
+      } finally {
+        calls.add("after");
+      }
+    };
+    InboxService inbox = readyInbox();
+
+    adapter(
+        dispatcher(
+            handler,
+            List.of(interceptor)
+        ),
+        inbox
+    ).onMessage(
+        record(null),
+        mock(Acknowledgment.class)
+    );
+
+    assertThat(calls).containsExactly(
+        "before",
+        "handler",
+        "after"
+    );
+    verify(inbox).markProcessed(
+        new EventId("event-1"),
+        "orders-api:order-events",
+        NOW
+    );
+  }
+
+  @Test
+  void routesRetryableInterceptorFailuresThroughTheExistingInboxRetryPath() {
+    AtomicInteger handlerInvocations = new AtomicInteger();
+    EventHandlerInterceptor interceptor = (event, chain) -> {
+      throw new EventRetryableException("context unavailable");
+    };
+    InboxService inbox = readyInbox();
+
+    adapter(
+        dispatcher(
+            handler(handlerInvocations),
+            List.of(interceptor)
+        ),
+        inbox,
+        retryPolicy(true)
+    ).onMessage(
+        record(null),
+        mock(Acknowledgment.class)
+    );
+
+    verify(inbox).markRetryPending(
+        new EventId("event-1"),
+        "orders-api:order-events",
+        1,
+        NOW,
+        NOW.plusSeconds(1),
+        "EventRetryableException: context unavailable"
+    );
+    assertThat(handlerInvocations).hasValue(0);
+  }
+
+  @Test
   void recordsOneProcessedOutcomeAfterTheInboxTransitionIsDurable() {
     RecordingConsumerMetrics metrics = new RecordingConsumerMetrics();
 
@@ -196,7 +270,14 @@ class KafkaConsumerAdapterTest {
         )
     );
     RecordingConsumerMetrics metrics = new RecordingConsumerMetrics();
-    ConsumerDispatcher dispatcher = mock(ConsumerDispatcher.class);
+    List<String> calls = new ArrayList<>();
+    ConsumerDispatcher dispatcher = dispatcher(
+        handler(calls),
+        List.of((event, chain) -> {
+          calls.add("interceptor");
+          chain.proceed();
+        })
+    );
 
     adapter(
         dispatcher,
@@ -211,7 +292,7 @@ class KafkaConsumerAdapterTest {
     assertThat(metrics.received).isEqualTo(1);
     assertThat(metrics.outcomes).containsExactly(ConsumerOutcome.DUPLICATE);
     assertThat(metrics.handlerResults).isEmpty();
-    verify(dispatcher, never()).dispatch(any());
+    assertThat(calls).isEmpty();
   }
 
   @Test
@@ -798,6 +879,63 @@ class KafkaConsumerAdapterTest {
         )
     ).thenReturn(Optional.of(processing));
     return inbox;
+  }
+
+  private static ConsumerDispatcher dispatcher(
+      EventHandler<String> handler,
+      List<EventHandlerInterceptor> interceptors
+  ) {
+    return new ConsumerDispatcher(
+        new EventHandlerRegistry(List.of(handler)),
+        new EventDeserializer() {
+          @Override
+          public <T> T deserialize(
+              SerializedPayload payload,
+              Class<T> payloadType
+          ) {
+            return payloadType.cast("payload");
+          }
+        },
+        interceptors
+    );
+  }
+
+  private static EventHandler<String> handler(List<String> calls) {
+    return new EventHandler<>() {
+      @Override
+      public String eventType() {
+        return "order.created";
+      }
+
+      @Override
+      public Class<String> payloadType() {
+        return String.class;
+      }
+
+      @Override
+      public void handle(EventMessage<String> event) {
+        calls.add("handler");
+      }
+    };
+  }
+
+  private static EventHandler<String> handler(AtomicInteger invocations) {
+    return new EventHandler<>() {
+      @Override
+      public String eventType() {
+        return "order.created";
+      }
+
+      @Override
+      public Class<String> payloadType() {
+        return String.class;
+      }
+
+      @Override
+      public void handle(EventMessage<String> event) {
+        invocations.incrementAndGet();
+      }
+    };
   }
 
   private static KafkaConsumerAdapter adapter(

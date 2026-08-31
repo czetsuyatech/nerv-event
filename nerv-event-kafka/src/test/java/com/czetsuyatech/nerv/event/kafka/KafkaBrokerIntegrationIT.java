@@ -170,7 +170,8 @@ class KafkaBrokerIntegrationIT {
   ) {
     ConsumerDispatcher dispatcher = new ConsumerDispatcher(
         new EventHandlerRegistry(List.of(handler)),
-        stringDeserializer()
+        stringDeserializer(),
+        List.of()
     );
     KafkaConsumerAdapter adapter = new KafkaConsumerAdapter(
         dispatcher,

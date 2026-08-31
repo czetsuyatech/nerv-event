@@ -678,7 +678,8 @@ class InboxServiceImplTest {
     private TestConsumerDispatcher(ConsumerAction action) {
       super(
           new EventHandlerRegistry(List.of()),
-          new NoOpEventDeserializer()
+          new NoOpEventDeserializer(),
+          List.of()
       );
       this.action = action;
     }
