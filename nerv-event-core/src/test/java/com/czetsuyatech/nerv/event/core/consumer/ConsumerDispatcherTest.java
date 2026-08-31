@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 class ConsumerDispatcherTest {
 
   @Test
-  void reconstructsAndDispatchesTheOriginalEventExactlyOnce() {
+  void dispatchesTheHandlerExactlyOnceWhenNoInterceptorsAreConfigured() {
     RecordingHandler handler = new RecordingHandler();
     RecordingDeserializer deserializer = new RecordingDeserializer("deserialized-order");
     ConsumerMessage message = message("correlation-1");

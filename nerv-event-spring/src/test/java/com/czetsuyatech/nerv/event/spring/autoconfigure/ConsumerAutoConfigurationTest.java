@@ -116,6 +116,33 @@ class ConsumerAutoConfigurationTest {
   }
 
   @Test
+  void dispatchesHandlersWhenNoInterceptorBeansExist() {
+    List<String> calls = new ArrayList<>();
+    EventHandler<String> handler = new StringHandler() {
+      @Override
+      public void handle(EventMessage<String> event) {
+        calls.add("handler");
+      }
+    };
+
+    contextRunner
+        .withBean(
+            ObjectMapper.class,
+            ObjectMapper::new
+        )
+        .withBean(
+            EventHandler.class,
+            () -> handler
+        )
+        .run(context -> {
+          assertThat(context).doesNotHaveBean(EventHandlerInterceptor.class);
+          context.getBean(ConsumerDispatcher.class).dispatch(message());
+
+          assertThat(calls).containsExactly("handler");
+        });
+  }
+
+  @Test
   void ordersInterceptorBeansUsingSpringOrdering() {
     List<String> calls = new ArrayList<>();
     EventHandler<String> handler = new StringHandler() {
@@ -153,20 +180,7 @@ class ConsumerAutoConfigurationTest {
             )
         )
         .run(context -> {
-          context.getBean(ConsumerDispatcher.class)
-              .dispatch(
-                  new ConsumerMessage(
-                      new EventId("event-1"),
-                      "order.created",
-                      Instant.parse("2026-08-15T00:00:00Z"),
-                      "orders",
-                      null,
-                      new SerializedPayload(
-                          "\"payload\"",
-                          "application/json"
-                      )
-                  )
-              );
+          context.getBean(ConsumerDispatcher.class).dispatch(message());
 
           assertThat(calls).containsExactly(
               "earlier-before",
@@ -176,6 +190,20 @@ class ConsumerAutoConfigurationTest {
               "earlier-after"
           );
         });
+  }
+
+  private static ConsumerMessage message() {
+    return new ConsumerMessage(
+        new EventId("event-1"),
+        "order.created",
+        Instant.parse("2026-08-15T00:00:00Z"),
+        "orders",
+        null,
+        new SerializedPayload(
+            "\"payload\"",
+            "application/json"
+        )
+    );
   }
 
   private static class StringHandler implements EventHandler<String> {
