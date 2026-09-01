@@ -11,6 +11,7 @@ import com.czetsuyatech.nerv.event.core.broker.BrokerProducerNotFoundException;
 import com.czetsuyatech.nerv.event.core.broker.BrokerId;
 import com.czetsuyatech.nerv.event.core.broker.BrokerProducer;
 import com.czetsuyatech.nerv.event.consumer.EventHandler;
+import com.czetsuyatech.nerv.event.consumer.EventHandlerInterceptor;
 import com.czetsuyatech.nerv.event.core.consumer.ConsumerDispatcher;
 import com.czetsuyatech.nerv.event.core.consumer.DefaultInboxFailureClassifier;
 import com.czetsuyatech.nerv.event.core.consumer.InboxFailureClassifier;
@@ -181,11 +182,13 @@ public class NervEventAutoConfiguration {
   @ConditionalOnMissingBean(ConsumerDispatcher.class)
   ConsumerDispatcher consumerDispatcher(
       EventHandlerRegistry eventHandlerRegistry,
-      EventDeserializer eventDeserializer
+      EventDeserializer eventDeserializer,
+      ObjectProvider<EventHandlerInterceptor> interceptors
   ) {
     return new ConsumerDispatcher(
         eventHandlerRegistry,
-        eventDeserializer
+        eventDeserializer,
+        interceptors.orderedStream().toList()
     );
   }
 

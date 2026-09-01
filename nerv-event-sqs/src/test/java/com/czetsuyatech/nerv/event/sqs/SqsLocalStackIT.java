@@ -155,7 +155,8 @@ class SqsLocalStackIT {
   ) {
     ConsumerDispatcher dispatcher = new ConsumerDispatcher(
         new EventHandlerRegistry(List.of(handler)),
-        stringDeserializer()
+        stringDeserializer(),
+        List.of()
     );
     SqsConsumerAdapter adapter = new SqsConsumerAdapter(
         dispatcher,

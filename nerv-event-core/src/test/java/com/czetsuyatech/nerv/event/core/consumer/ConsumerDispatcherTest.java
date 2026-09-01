@@ -4,11 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.czetsuyatech.nerv.event.consumer.EventHandler;
+import com.czetsuyatech.nerv.event.consumer.EventHandlerInterceptor;
 import com.czetsuyatech.nerv.event.core.serialization.EventDeserializer;
 import com.czetsuyatech.nerv.event.core.serialization.SerializedPayload;
+import com.czetsuyatech.nerv.event.exception.EventRetryableException;
 import com.czetsuyatech.nerv.event.model.EventId;
 import com.czetsuyatech.nerv.event.model.EventMessage;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -16,13 +19,14 @@ import org.junit.jupiter.api.Test;
 class ConsumerDispatcherTest {
 
   @Test
-  void reconstructsAndDispatchesTheOriginalEventExactlyOnce() {
+  void dispatchesTheHandlerExactlyOnceWhenNoInterceptorsAreConfigured() {
     RecordingHandler handler = new RecordingHandler();
     RecordingDeserializer deserializer = new RecordingDeserializer("deserialized-order");
     ConsumerMessage message = message("correlation-1");
     ConsumerDispatcher dispatcher = new ConsumerDispatcher(
         new EventHandlerRegistry(List.of(handler)),
-        deserializer
+        deserializer,
+        List.of()
     );
 
     dispatcher.dispatch(message);
@@ -46,7 +50,8 @@ class ConsumerDispatcherTest {
   void propagatesUnknownHandlerFailures() {
     ConsumerDispatcher dispatcher = new ConsumerDispatcher(
         new EventHandlerRegistry(List.of()),
-        new RecordingDeserializer("unused")
+        new RecordingDeserializer("unused"),
+        List.of()
     );
 
     assertThatThrownBy(() -> dispatcher.dispatch(message(null)))
@@ -68,7 +73,8 @@ class ConsumerDispatcherTest {
     };
     ConsumerDispatcher dispatcher = new ConsumerDispatcher(
         new EventHandlerRegistry(List.of(new RecordingHandler())),
-        deserializer
+        deserializer,
+        List.of()
     );
 
     assertThatThrownBy(() -> dispatcher.dispatch(message(null)))
@@ -104,11 +110,187 @@ class ConsumerDispatcherTest {
     };
     ConsumerDispatcher dispatcher = new ConsumerDispatcher(
         new EventHandlerRegistry(List.of(handler)),
-        new RecordingDeserializer("deserialized-order")
+        new RecordingDeserializer("deserialized-order"),
+        List.of()
     );
 
     assertThatThrownBy(() -> dispatcher.dispatch(message(null))).isSameAs(handlerFailure);
     assertThat(invocations).hasValue(1);
+  }
+
+  @Test
+  void wrapsTheHandlerInConfiguredInterceptorOrder() {
+    List<String> calls = new ArrayList<>();
+    RecordingHandler handler = new RecordingHandler() {
+      @Override
+      public void handle(EventMessage<String> event) {
+        calls.add("handler");
+        super.handle(event);
+      }
+    };
+    ConsumerDispatcher dispatcher = new ConsumerDispatcher(
+        new EventHandlerRegistry(List.of(handler)),
+        new RecordingDeserializer("deserialized-order"),
+        List.of(
+            around("first", calls),
+            around("second", calls)
+        )
+    );
+
+    dispatcher.dispatch(message(null));
+
+    assertThat(calls).containsExactly(
+        "first-before",
+        "second-before",
+        "handler",
+        "second-after",
+        "first-after"
+    );
+    assertThat(handler.invocations).hasValue(1);
+  }
+
+  @Test
+  void runsInterceptorCleanupWhenTheHandlerFails() {
+    List<String> calls = new ArrayList<>();
+    IllegalStateException failure = new IllegalStateException("business failure");
+    EventHandler<String> handler = handlerThatThrows(
+        calls,
+        failure
+    );
+    ConsumerDispatcher dispatcher = new ConsumerDispatcher(
+        new EventHandlerRegistry(List.of(handler)),
+        new RecordingDeserializer("deserialized-order"),
+        List.of(around("context", calls))
+    );
+
+    assertThatThrownBy(() -> dispatcher.dispatch(message(null))).isSameAs(failure);
+    assertThat(calls).containsExactly(
+        "context-before",
+        "handler",
+        "context-after"
+    );
+  }
+
+  @Test
+  void doesNotInvokeTheHandlerWhenAnInterceptorFailsBeforeProceeding() {
+    AtomicInteger handlerInvocations = new AtomicInteger();
+    IllegalStateException failure = new IllegalStateException("context unavailable");
+    ConsumerDispatcher dispatcher = new ConsumerDispatcher(
+        new EventHandlerRegistry(List.of(handler(handlerInvocations))),
+        new RecordingDeserializer("deserialized-order"),
+        List.of((event, chain) -> {
+          throw failure;
+        })
+    );
+
+    assertThatThrownBy(() -> dispatcher.dispatch(message(null))).isSameAs(failure);
+    assertThat(handlerInvocations).hasValue(0);
+  }
+
+  @Test
+  void propagatesInterceptorFailuresWithoutReplacingThemWithMissingProceedFailure() {
+    AtomicInteger handlerInvocations = new AtomicInteger();
+    EventRetryableException failure = new EventRetryableException("context unavailable");
+    ConsumerDispatcher dispatcher = new ConsumerDispatcher(
+        new EventHandlerRegistry(List.of(handler(handlerInvocations))),
+        new RecordingDeserializer("deserialized-order"),
+        List.of((event, chain) -> {
+          throw failure;
+        })
+    );
+
+    assertThatThrownBy(() -> dispatcher.dispatch(message(null))).isSameAs(failure);
+    assertThat(handlerInvocations).hasValue(0);
+  }
+
+  @Test
+  void failsExplicitlyWhenAnInterceptorDoesNotProceed() {
+    AtomicInteger handlerInvocations = new AtomicInteger();
+    ConsumerDispatcher dispatcher = new ConsumerDispatcher(
+        new EventHandlerRegistry(List.of(handler(handlerInvocations))),
+        new RecordingDeserializer("deserialized-order"),
+        List.of((event, chain) -> {
+        })
+    );
+
+    assertThatThrownBy(() -> dispatcher.dispatch(message(null)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("completed without invoking chain.proceed()");
+    assertThat(handlerInvocations).hasValue(0);
+  }
+
+  @Test
+  void invokesTheHandlerAtMostOnceWhenAnInterceptorProceedsTwice() {
+    AtomicInteger handlerInvocations = new AtomicInteger();
+    ConsumerDispatcher dispatcher = new ConsumerDispatcher(
+        new EventHandlerRegistry(List.of(handler(handlerInvocations))),
+        new RecordingDeserializer("deserialized-order"),
+        List.of((event, chain) -> {
+          chain.proceed();
+          chain.proceed();
+        })
+    );
+
+    assertThatThrownBy(() -> dispatcher.dispatch(message(null)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("must not be called more than once");
+    assertThat(handlerInvocations).hasValue(1);
+  }
+
+  private static EventHandlerInterceptor around(
+      String name,
+      List<String> calls
+  ) {
+    return (event, chain) -> {
+      calls.add(name + "-before");
+      try {
+        chain.proceed();
+      } finally {
+        calls.add(name + "-after");
+      }
+    };
+  }
+
+  private static EventHandler<String> handler(AtomicInteger invocations) {
+    return new EventHandler<>() {
+      @Override
+      public String eventType() {
+        return "order.created";
+      }
+
+      @Override
+      public Class<String> payloadType() {
+        return String.class;
+      }
+
+      @Override
+      public void handle(EventMessage<String> event) {
+        invocations.incrementAndGet();
+      }
+    };
+  }
+
+  private static EventHandler<String> handlerThatThrows(
+      List<String> calls,
+      RuntimeException failure
+  ) {
+    return new EventHandler<>() {
+      @Override
+      public String eventType() {
+        return "order.created";
+      }
+
+      @Override
+      public Class<String> payloadType() {
+        return String.class;
+      }
+
+      @Override
+      public void handle(EventMessage<String> event) {
+        calls.add("handler");
+        throw failure;
+      }
+    };
   }
 
   private static ConsumerMessage message(String correlationId) {
@@ -145,7 +327,7 @@ class ConsumerDispatcherTest {
     }
   }
 
-  private static final class RecordingHandler implements EventHandler<String> {
+  private static class RecordingHandler implements EventHandler<String> {
     private final AtomicInteger invocations = new AtomicInteger();
     private EventMessage<String> received;
 

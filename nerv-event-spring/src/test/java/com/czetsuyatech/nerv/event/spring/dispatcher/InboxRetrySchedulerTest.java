@@ -211,7 +211,8 @@ class InboxRetrySchedulerTest {
     private NoOpConsumerDispatcher() {
       super(
           new EventHandlerRegistry(List.of()),
-          new NoOpEventDeserializer()
+          new NoOpEventDeserializer(),
+          List.of()
       );
     }
 

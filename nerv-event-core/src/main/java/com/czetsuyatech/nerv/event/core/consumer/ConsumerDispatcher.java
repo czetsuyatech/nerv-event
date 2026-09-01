@@ -1,8 +1,11 @@
 package com.czetsuyatech.nerv.event.core.consumer;
 
 import com.czetsuyatech.nerv.event.consumer.EventHandler;
+import com.czetsuyatech.nerv.event.consumer.EventHandlerChain;
+import com.czetsuyatech.nerv.event.consumer.EventHandlerInterceptor;
 import com.czetsuyatech.nerv.event.core.serialization.EventDeserializer;
 import com.czetsuyatech.nerv.event.model.EventMessage;
+import java.util.List;
 import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +23,9 @@ public class ConsumerDispatcher {
 
   @NonNull
   private final EventDeserializer eventDeserializer;
+
+  @NonNull
+  private final List<EventHandlerInterceptor> interceptors;
 
   public void dispatch(ConsumerMessage message) {
     Objects.requireNonNull(
@@ -58,16 +64,20 @@ public class ConsumerDispatcher {
         message,
         payloadType
     );
-    handler.handle(
-        new EventMessage<>(
-            message.eventId(),
-            message.eventType(),
-            message.timestamp(),
-            message.source(),
-            message.correlationId(),
-            payload
-        )
+    EventMessage<T> event = new EventMessage<>(
+        message.eventId(),
+        message.eventType(),
+        message.timestamp(),
+        message.source(),
+        message.correlationId(),
+        payload
     );
+    new InterceptorChain(
+        event,
+        interceptors,
+        () -> handler.handle(event),
+        0
+    ).proceed();
   }
 
   private <T> T deserialize(
@@ -99,5 +109,56 @@ public class ConsumerDispatcher {
   @SuppressWarnings("unchecked")
   private static <T> EventHandler<T> castHandler(EventHandler<?> handler) {
     return (EventHandler<T>) handler;
+  }
+
+  private static final class InterceptorChain implements EventHandlerChain {
+    private final EventMessage<?> event;
+    private final List<EventHandlerInterceptor> interceptors;
+    private final Runnable handler;
+    private final int interceptorIndex;
+    private boolean proceeded;
+
+    private InterceptorChain(
+        EventMessage<?> event,
+        List<EventHandlerInterceptor> interceptors,
+        Runnable handler,
+        int interceptorIndex
+    )
+    {
+      this.event = event;
+      this.interceptors = interceptors;
+      this.handler = handler;
+      this.interceptorIndex = interceptorIndex;
+    }
+
+    @Override
+    public void proceed() {
+      if (proceeded) {
+        throw new IllegalStateException("EventHandlerChain.proceed() must not be called more than once");
+      }
+      proceeded = true;
+      if (interceptorIndex == interceptors.size()) {
+        handler.run();
+        return;
+      }
+      InterceptorChain next = new InterceptorChain(
+          event,
+          interceptors,
+          handler,
+          interceptorIndex + 1
+      );
+      EventHandlerInterceptor interceptor = interceptors.get(interceptorIndex);
+      interceptor
+          .intercept(
+              event,
+              next
+          );
+      if (!next.proceeded) {
+        throw new IllegalStateException(
+            "EventHandlerInterceptor completed without invoking chain.proceed(): "
+                + interceptor.getClass().getName()
+        );
+      }
+    }
   }
 }
