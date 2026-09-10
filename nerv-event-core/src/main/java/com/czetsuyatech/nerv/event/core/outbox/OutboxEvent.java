@@ -7,7 +7,8 @@ import java.util.Objects;
 import lombok.Builder;
 
 /**
- * Immutable, persistence-agnostic representation of a pending event delivery.
+ * Immutable, persistence-agnostic representation of an event delivery. {@code claimVersion} is a monotonic fencing
+ * token: every claim increments it, and workers must present the value they received for every post-claim transition.
  */
 @Builder
 public record OutboxEvent(
@@ -16,9 +17,23 @@ public record OutboxEvent(
     Destination destination,
     int attemptCount,
     Instant nextAttemptAt,
-    OutboxStatus status
+    OutboxStatus status,
+    String lockedBy,
+    long claimVersion
 )
 {
+
+  public OutboxEvent(
+      OutboxId id,
+      EventMessage<?> event,
+      Destination destination,
+      int attemptCount,
+      Instant nextAttemptAt,
+      OutboxStatus status
+  )
+  {
+    this(id, event, destination, attemptCount, nextAttemptAt, status, null, 0);
+  }
 
   public OutboxEvent {
     Objects.requireNonNull(
@@ -44,5 +59,8 @@ public record OutboxEvent(
         status,
         "status must not be null"
     );
+    if (claimVersion < 0) {
+      throw new IllegalArgumentException("claimVersion must not be negative");
+    }
   }
 }

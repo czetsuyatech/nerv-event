@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <parent><groupId>com.czetsuyatech.nerv</groupId><artifactId>nerv-event</artifactId><version>1.1.0</version></parent>
+    <parent><groupId>com.czetsuyatech.nerv</groupId><artifactId>nerv-event</artifactId><version>2.0.0</version></parent>
     <artifactId>nerv-event-sqs</artifactId><name>Nerv Event SQS Integration</name><description>SQS integration boundary for Nerv Event.</description>
     <dependencies>
       <dependency><groupId>com.czetsuyatech.nerv</groupId><artifactId>nerv-event-core</artifactId><version>${project.version}</version></dependency>

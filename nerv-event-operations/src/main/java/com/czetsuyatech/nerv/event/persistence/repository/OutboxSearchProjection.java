@@ -32,6 +32,8 @@ public interface OutboxSearchProjection {
 
   String getLockedBy();
 
+  long getClaimVersion();
+
   String getLastError();
 
   Instant getCreatedAt();

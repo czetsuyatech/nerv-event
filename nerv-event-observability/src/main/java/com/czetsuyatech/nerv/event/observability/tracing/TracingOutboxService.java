@@ -68,25 +68,29 @@ public final class TracingOutboxService implements OutboxService {
   }
 
   @Override
-  public void markPublished(
+  public boolean markPublished(
       OutboxId id,
+      long claimVersion,
       BrokerPublishResult result
   ) {
-    delegate.markPublished(
+    return delegate.markPublished(
         id,
+        claimVersion,
         result
     );
   }
 
   @Override
-  public void reschedule(
+  public boolean reschedule(
       OutboxId id,
+      long claimVersion,
       int attempt,
       Instant next,
       String reason
   ) {
-    delegate.reschedule(
+    return delegate.reschedule(
         id,
+        claimVersion,
         attempt,
         next,
         reason
@@ -94,13 +98,15 @@ public final class TracingOutboxService implements OutboxService {
   }
 
   @Override
-  public void markFailed(
+  public boolean markFailed(
       OutboxId id,
+      long claimVersion,
       int attempt,
       String reason
   ) {
-    delegate.markFailed(
+    return delegate.markFailed(
         id,
+        claimVersion,
         attempt,
         reason
     );

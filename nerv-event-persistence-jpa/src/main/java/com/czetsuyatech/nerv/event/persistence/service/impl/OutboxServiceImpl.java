@@ -1,7 +1,6 @@
 package com.czetsuyatech.nerv.event.persistence.service.impl;
 
 import com.czetsuyatech.nerv.event.core.broker.BrokerPublishResult;
-import com.czetsuyatech.nerv.event.core.exception.EventStateTransitionException;
 import com.czetsuyatech.nerv.event.core.outbox.OutboxEvent;
 import com.czetsuyatech.nerv.event.core.outbox.OutboxId;
 import com.czetsuyatech.nerv.event.core.outbox.OutboxService;
@@ -163,8 +162,9 @@ public class OutboxServiceImpl implements OutboxService {
 
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void markPublished(
+  public boolean markPublished(
       OutboxId id,
+      long claimVersion,
       BrokerPublishResult result
   ) {
     Objects.requireNonNull(
@@ -172,31 +172,31 @@ public class OutboxServiceImpl implements OutboxService {
         "result must not be null"
     );
     Instant transitionAt = clock.instant();
-    assertTransitioned(
-        entityRepository.markPublished(
-            outboxIdValue(id),
-            owner,
-            OutboxStatus.PUBLISHED,
-            OutboxStatus.PROCESSING,
-            transitionAt,
-            transitionAt
-        ),
-        id,
+    boolean transitioned = entityRepository.markPublished(
+        outboxIdValue(id),
         owner,
+        claimVersion,
+        OutboxStatus.PUBLISHED,
         OutboxStatus.PROCESSING,
-        OutboxStatus.PUBLISHED
-    );
-    log.debug(
-        "Outbox event marked published outboxId={} owner={}",
-        id.value(),
-        owner
-    );
+        transitionAt,
+        transitionAt
+    ) == 1;
+    if (transitioned) {
+      log.debug(
+          "Outbox event marked published outboxId={} owner={} claimVersion={}",
+          id.value(),
+          owner,
+          claimVersion
+      );
+    }
+    return transitioned;
   }
 
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void reschedule(
+  public boolean reschedule(
       OutboxId id,
+      long claimVersion,
       int attemptCount,
       Instant nextAttemptAt,
       String failureReason
@@ -206,60 +206,59 @@ public class OutboxServiceImpl implements OutboxService {
         nextAttemptAt,
         "nextAttemptAt must not be null"
     );
-    assertTransitioned(
-        entityRepository.reschedule(
-            outboxIdValue(id),
-            owner,
-            OutboxStatus.PENDING,
-            OutboxStatus.PROCESSING,
-            attemptCount,
-            nextAttemptAt,
-            clock.instant(),
-            truncateFailureReason(failureReason)
-        ),
-        id,
+    boolean transitioned = entityRepository.reschedule(
+        outboxIdValue(id),
         owner,
+        claimVersion,
+        OutboxStatus.PENDING,
         OutboxStatus.PROCESSING,
-        OutboxStatus.PENDING
-    );
-    log.debug(
-        "Outbox event rescheduled outboxId={} owner={} attemptCount={} nextAttemptAt={}",
-        id.value(),
-        owner,
         attemptCount,
-        nextAttemptAt
-    );
+        nextAttemptAt,
+        clock.instant(),
+        truncateFailureReason(failureReason)
+    ) == 1;
+    if (transitioned) {
+      log.debug(
+          "Outbox event rescheduled outboxId={} owner={} claimVersion={} attemptCount={} nextAttemptAt={}",
+          id.value(),
+          owner,
+          claimVersion,
+          attemptCount,
+          nextAttemptAt
+      );
+    }
+    return transitioned;
   }
 
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void markFailed(
+  public boolean markFailed(
       OutboxId id,
+      long claimVersion,
       int attemptCount,
       String failureReason
   ) {
     validateAttemptCount(attemptCount);
-    assertTransitioned(
-        entityRepository.markFailed(
-            outboxIdValue(id),
-            owner,
-            OutboxStatus.FAILED,
-            OutboxStatus.PROCESSING,
-            attemptCount,
-            clock.instant(),
-            truncateFailureReason(failureReason)
-        ),
-        id,
+    boolean transitioned = entityRepository.markFailed(
+        outboxIdValue(id),
         owner,
+        claimVersion,
+        OutboxStatus.FAILED,
         OutboxStatus.PROCESSING,
-        OutboxStatus.FAILED
-    );
-    log.debug(
-        "Outbox event marked failed outboxId={} owner={} attemptCount={}",
-        id.value(),
-        owner,
-        attemptCount
-    );
+        attemptCount,
+        clock.instant(),
+        truncateFailureReason(failureReason)
+    ) == 1;
+    if (transitioned) {
+      log.debug(
+          "Outbox event marked failed outboxId={} owner={} claimVersion={} attemptCount={}",
+          id.value(),
+          owner,
+          claimVersion,
+          attemptCount
+      );
+    }
+    return transitioned;
   }
 
   private static String outboxIdValue(OutboxId id) {
@@ -293,31 +292,6 @@ public class OutboxServiceImpl implements OutboxService {
             payload
         )
     );
-  }
-
-  private static void assertTransitioned(
-      int updatedRowCount,
-      OutboxId id,
-      String owner,
-      OutboxStatus expectedStatus,
-      OutboxStatus requestedStatus
-  ) {
-    if (updatedRowCount != 1) {
-      log.warn(
-          "Outbox state transition rejected outboxId={} owner={} expectedStatus={} requestedStatus={} updatedRows={}",
-          id.value(),
-          owner,
-          expectedStatus,
-          requestedStatus,
-          updatedRowCount
-      );
-      throw new EventStateTransitionException(
-          id,
-          expectedStatus,
-          requestedStatus,
-          owner
-      );
-    }
   }
 
   private static String requireNonBlank(

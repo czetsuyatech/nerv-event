@@ -4,7 +4,7 @@ This guide follows the runnable [`nerv-event-spring-boot-demo`](../../nerv-examp
 
 1. Add `com.czetsuyatech.nerv:nerv-event-spring-boot-starter` as shown in the [README](../README.md#installation).
 2. Configure a PostgreSQL `DataSource` and use `spring.jpa.hibernate.ddl-auto=validate` in deployed environments.
-3. Apply `001-create-outbox.sql` through `004-create-indexes.sql` from `nerv-event-persistence-jpa/src/main/resources/META-INF/nerv-event/db/postgresql/migration/` through your application-owned migration process.
+3. Apply `001-create-outbox.sql` through `005-add-outbox-claim-version.sql` from `nerv-event-persistence-jpa/src/main/resources/META-INF/nerv-event/db/postgresql/migration/` through your application-owned migration process.
 4. Enable one broker and map a logical destination:
 
 ```yaml
@@ -38,6 +38,9 @@ RetryPolicy outboxRetryPolicy() {
 6. Inject `EventPublisher` and call it inside the same `@Transactional` business method that changes your data. The call stores a `PENDING` Outbox row; it does not synchronously send to Kafka/SQS.
 7. Register a Spring bean implementing `EventHandler<T>` for each inbound event type.
 8. Run the application. The Outbox dispatcher publishes durable rows; configured consumer adapters register and process Inbox rows.
-8. Inspect `nerv_outbox_event` and `nerv_inbox_event`, or add the optional operations modules for administrative inspection.
+9. Inspect `nerv_outbox_event` and `nerv_inbox_event`, or add the optional operations modules for administrative inspection.
 
-The demo also demonstrates Kafka publication/consumption, two SQS client IDs, SQS destinations, Inbox retry, retention settings, and the optional operations web surface. It deliberately contains no manual NERV scan annotations or broker listener annotations. Its current configuration does not supply an Outbox `RetryPolicy`; treat it as a configuration and API reference, not a complete successful Outbox-dispatch deployment until that application extension is added.
+The demo also demonstrates Kafka publication/consumption, two SQS client IDs, SQS destinations,
+Inbox retry, retention settings, and the optional operations web surface. It deliberately contains
+no manual NERV scan annotations or broker listener annotations. It supplies the required Outbox
+`RetryPolicy` and is a complete dispatch configuration and API reference.

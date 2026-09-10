@@ -70,10 +70,12 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
       where event.id = :id
         and event.status = :processing
         and event.lockedBy = :owner
+        and event.claimVersion = :claimVersion
       """)
   int markPublished(
       @Param("id") String id,
       @Param("owner") String owner,
+      @Param("claimVersion") long claimVersion,
       @Param("published") OutboxStatus published,
       @Param("processing") OutboxStatus processing,
       @Param("publishedAt") Instant publishedAt,
@@ -94,10 +96,12 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
       where event.id = :id
         and event.status = :processing
         and event.lockedBy = :owner
+        and event.claimVersion = :claimVersion
       """)
   int reschedule(
       @Param("id") String id,
       @Param("owner") String owner,
+      @Param("claimVersion") long claimVersion,
       @Param("pending") OutboxStatus pending,
       @Param("processing") OutboxStatus processing,
       @Param("attemptCount") int attemptCount,
@@ -119,10 +123,12 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
       where event.id = :id
         and event.status = :processing
         and event.lockedBy = :owner
+        and event.claimVersion = :claimVersion
       """)
   int markFailed(
       @Param("id") String id,
       @Param("owner") String owner,
+      @Param("claimVersion") long claimVersion,
       @Param("failed") OutboxStatus failed,
       @Param("processing") OutboxStatus processing,
       @Param("attemptCount") int attemptCount,

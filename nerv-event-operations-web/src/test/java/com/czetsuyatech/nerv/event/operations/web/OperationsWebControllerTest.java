@@ -76,6 +76,17 @@ class OperationsWebControllerTest {
   }
 
   @Test
+  void outboxDetailExposesTheClaimVersion() throws Exception {
+    OutboxId id = new OutboxId("outbox-1");
+    when(outbox.find(id)).thenReturn(Optional.of(outboxView(OutboxStatus.PROCESSING)));
+
+    mvc.perform(get("/management/nerv-event/outbox/outbox-1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.lockedBy").doesNotExist())
+        .andExpect(jsonPath("$.claimVersion").value(2));
+  }
+
+  @Test
   void rejectedOutboxRetryAndUnknownOutboxMapToConflictAndNotFound() throws Exception {
     OutboxId published = new OutboxId("published");
     when(outbox.find(published)).thenReturn(Optional.of(outboxView(OutboxStatus.PUBLISHED)));
@@ -194,6 +205,7 @@ class OperationsWebControllerTest {
         now,
         null,
         null,
+        2,
         "broker unavailable",
         now,
         now,

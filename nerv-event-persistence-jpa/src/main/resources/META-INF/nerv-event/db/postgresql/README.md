@@ -6,7 +6,7 @@ not discovered automatically by Flyway. Execute them once, in lexical order, usi
 application's migration process. Nerv Event never executes them and has no Flyway or Liquibase
 runtime dependency.
 
-For a new database, execute `001` through `004`. The tables are `nerv_outbox_event`,
+For a new database, execute `001` through `005`. The tables are `nerv_outbox_event`,
 `nerv_inbox_event`, and `nerv_event_trace_context`; no PostgreSQL schema is hard-coded.
 
 Migration files are immutable once released. Later schema changes must be represented by a new,

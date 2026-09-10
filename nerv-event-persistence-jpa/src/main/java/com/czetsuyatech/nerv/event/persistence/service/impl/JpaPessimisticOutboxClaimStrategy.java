@@ -79,15 +79,17 @@ public final class JpaPessimisticOutboxClaimStrategy implements OutboxClaimStrat
       claimedEvent.setStatus(OutboxStatus.PROCESSING);
       claimedEvent.setLockedAt(claimedAt);
       claimedEvent.setLockedBy(owner);
+      claimedEvent.setClaimVersion(Math.incrementExact(claimedEvent.getClaimVersion()));
       claimedEvent.setUpdatedAt(claimedAt);
       log.debug(
-          "Claimed outbox event outboxId={} eventId={} eventType={} destination={} correlationId={} owner={} attemptCount={}",
+          "Claimed outbox event outboxId={} eventId={} eventType={} destination={} correlationId={} owner={} claimVersion={} attemptCount={}",
           claimedEvent.getId(),
           claimedEvent.getEventId(),
           claimedEvent.getEventType(),
           claimedEvent.getDestination(),
           claimedEvent.getCorrelationId(),
           owner,
+          claimedEvent.getClaimVersion(),
           claimedEvent.getAttemptCount()
       );
     }

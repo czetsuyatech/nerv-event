@@ -11,6 +11,8 @@ With the default base path `/management/nerv-event`, available endpoints are:
 
 Lists default to page 0 and size 20; sizes above 100 are rejected. Search is stable (`updatedAt DESC` plus durable-ID tie-breaker). Missing rows return 404, malformed/oversized requests 400, and an invalid or stale manual retry 409. A successful retry response is `202 Accepted`: a normal worker performs publication/handling later.
 
+Outbox detail responses include `lockedBy`, `lockedAt`, and `claimVersion` so operators can identify the exact active claim when diagnosing lease recovery or a fenced stale worker.
+
 These endpoints are administrative and have no installed authentication or authorization. Do not expose them publicly. The application owns Spring Security, for example:
 
 ```java

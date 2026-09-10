@@ -9,6 +9,7 @@ NERV provides **at-least-once delivery**, not exactly-once business processing. 
 Important windows remain:
 
 - Broker publish succeeds but persisting `PUBLISHED` fails or the process crashes: the Outbox may publish again.
+- An Outbox worker publishes, loses its lease, and resumes after another worker reclaims and republishes: its stale database transition is fenced, but both broker publications may already have happened.
 - Handler business work succeeds but `PROCESSED` cannot be persisted: the broker can redeliver and work may run again.
 - `PROCESSED` is persisted but broker acknowledgement/delete fails: the broker can redeliver, and Inbox state suppresses ordinary handler execution.
 
@@ -16,7 +17,7 @@ Make external effects idempotent (provider idempotency keys, unique constraints,
 
 ## Operations at scale
 
-Multiple pods are safe without leader election: correctness relies on database claims, processing owners, leases, Kafka consumer groups, and SQS visibility. Treat broker publication, acknowledgement, claim expiry, and process restart as at-least-once paths, and make handlers idempotent. Tune batches, lease durations, and adaptive polling to the service's latency and database capacity; leases must exceed worst-case claimed work. For SQS, set visibility timeout above the complete processing path and the Inbox lease because visibility is not extended. Configure Kafka poll/heartbeat limits above worst-case handler duration. Broker send timeouts are ambiguous and can produce duplicate publication.
+Multiple pods are safe without leader election: correctness relies on database claims, processing owners, Outbox claim-version fencing, leases, Kafka consumer groups, and SQS visibility. An Outbox lease lets another worker recover abandoned work; its monotonic fencing token prevents the previous worker from changing durable state after ownership moves. Inbox idempotency protects consumers from duplicate broker publication. Treat broker publication, acknowledgement, claim expiry, and process restart as at-least-once paths, and make handlers idempotent. Tune batches, lease durations, and adaptive polling to the service's latency and database capacity; leases must exceed worst-case claimed work. For SQS, set visibility timeout above the complete processing path and the Inbox lease because visibility is not extended. Configure Kafka poll/heartbeat limits above worst-case handler duration. Broker send timeouts are ambiguous and can produce duplicate publication.
 
 Retention is disabled by default. Enable it only after selecting an approved retention window; it deletes successful terminal records and limits historical inspection. Configure Outbox and Inbox backlog health thresholds from the service SLO, alert before they are exceeded, and include scheduler health in readiness monitoring. Protect operations endpoints, use payload exposure sparingly, and expose health/metrics to your normal monitoring system. Ensure graceful shutdown lets broker containers and in-flight handlers stop according to the host application's lifecycle.
 

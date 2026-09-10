@@ -27,7 +27,8 @@ public interface OutboxEventMapper {
   @Mapping(target = "payload", ignore = true)
   @Mapping(target = "availableAt", source = "nextAttemptAt")
   @Mapping(target = "lockedAt", ignore = true)
-  @Mapping(target = "lockedBy", ignore = true)
+  @Mapping(target = "lockedBy", source = "lockedBy")
+  @Mapping(target = "claimVersion", source = "claimVersion")
   @Mapping(target = "lastError", ignore = true)
   @Mapping(target = "createdAt", ignore = true)
   @Mapping(target = "updatedAt", ignore = true)
@@ -41,6 +42,8 @@ public interface OutboxEventMapper {
   @Mapping(target = "attemptCount", source = "entity.attemptCount")
   @Mapping(target = "nextAttemptAt", source = "entity.availableAt")
   @Mapping(target = "status", source = "entity.status")
+  @Mapping(target = "lockedBy", source = "entity.lockedBy")
+  @Mapping(target = "claimVersion", source = "entity.claimVersion")
   OutboxEvent toCore(
       OutboxEventEntity entity,
       EventMessage<?> event

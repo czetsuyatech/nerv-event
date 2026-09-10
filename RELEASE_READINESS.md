@@ -24,7 +24,7 @@ no signing or Central deployment was attempted in this audit.
 |---|---|---|
 | Full reactor + integration | PASS | `mvn clean verify -Pintegration-tests -q` on Java 21.0.12. Docker-backed PostgreSQL, Kafka, and SQS suites passed. |
 | Resilience | PASS | `mvn verify -Presilience -q` on Java 21.0.12. |
-| PostgreSQL concurrency | PASS | Active leases denied, expired leases reclaimed, stale-owner transitions rejected, and retention/migrations passed. |
+| PostgreSQL concurrency | PASS | Active leases denied, expired leases reclaimed, stale-owner and stale-version transitions rejected, and retention/migrations passed. |
 | Kafka adapter | PASS | Kafka integration suite passed. |
 | SQS adapter | PASS | LocalStack suite passed. |
 | Starter | PASS | Minimal and explicit application JPA repository scans passed. |
@@ -49,7 +49,7 @@ no signing or Central deployment was attempted in this audit.
 
 | ID | Severity | Area | Finding | Resolution | Status |
 |---|---|---|---|---|---|
-| RR-01 | BLOCKER | Demo adoption | The external Kafka-to-SQS acceptance flow initially had no valid transaction boundary for its handler and lacked required Outbox retry configuration. | The demo now uses `1.0.0`, provides the documented `RetryPolicy`, and runs its follow-up publisher in `@Transactional`. Full Docker E2E passes. | Fixed |
+| RR-01 | BLOCKER | Demo adoption | The external Kafka-to-SQS acceptance flow initially had no valid transaction boundary for its handler and lacked required Outbox retry configuration. | The demo now uses `2.0.0`, provides the documented `RetryPolicy`, and runs its follow-up publisher in `@Transactional`. Full Docker E2E passes. | Fixed |
 | RR-02 | BLOCKER | Maven Central | Central identity metadata, source/Javadoc JAR generation, GPG configuration, and the Central publishing profile are present. | The release owner confirmed their existing private signing key is managed locally. Run the approved Central deployment from the release environment. | Fixed |
 | RR-03 | BLOCKER | Operations | Operations implementations were final while class-based transactional proxies were enabled. | Removed `final`; reactor and demo verification pass. | Fixed |
 | RR-04 | HIGH | Kafka Boot integration | Kafka producer/consumer auto-configuration could evaluate before Boot supplied `KafkaTemplate`/`ConsumerFactory`. | Ordered configuration after Boot Kafka; external Kafka-to-SQS E2E passes. | Fixed |
@@ -76,7 +76,9 @@ no signing or Central deployment was attempted in this audit.
 
 ## Compatibility
 
-- Coordinates: `com.czetsuyatech.nerv`; current version `1.0.0`.
+- Coordinates: `com.czetsuyatech.nerv`; current version `2.0.0`.
+- Version 2.0.0 intentionally changes the public `OutboxService` post-claim transition contract.
+  See [Upgrading to 2.0](docs/upgrading-to-2.0.md).
 - Java bytecode target: 21.
 - Spring Boot target tested here: 4.1.0 only.
 - Kafka and SQS envelopes use UTF-8 text payloads and carry EventId, type, source, correlation ID, timestamp, and content type. Persisted payloads depend on the configured Jackson-compatible payload model; upgrades must preserve deserialization compatibility.
@@ -86,7 +88,12 @@ no signing or Central deployment was attempted in this audit.
 
 `EventPublisher` calls `JpaOutboxRepository.save` with `MANDATORY` propagation, so an application transaction atomically commits or rolls back its business row and Outbox row. Claim, register, and state-transition work uses short `REQUIRES_NEW` transactions. No database transaction spans broker send, handler execution, or broker acknowledgement.
 
-Outbox claims use PostgreSQL pessimistic write locks, persist owner/lease state, release the database transaction before sending, and guard subsequent transitions by owner and `PROCESSING` status. Inbox registration relies on the primary-key EventId uniqueness constraint and converts duplicate-key races to durable duplicate results. Kafka/SQS adapters persist durable Inbox outcomes before acknowledgement/delete; terminal and retry-pending duplicates are acknowledged without handler replay.
+Outbox claims use PostgreSQL pessimistic write locks, persist owner/lease state, increment the
+durable claim version, release the database transaction before sending, and guard subsequent
+transitions by owner, exact claim version, and `PROCESSING` status. Inbox registration relies on
+the primary-key EventId uniqueness constraint and converts duplicate-key races to durable duplicate
+results. Kafka/SQS adapters persist durable Inbox outcomes before acknowledgement/delete; terminal
+and retry-pending duplicates are acknowledged without handler replay.
 
 ## Final Recommendation
 

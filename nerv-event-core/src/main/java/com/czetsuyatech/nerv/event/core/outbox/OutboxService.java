@@ -12,27 +12,37 @@ public interface OutboxService {
   OutboxEvent save(OutboxEvent event);
 
   /**
-   * Atomically claims eligible pending events and returns them in PROCESSING state.
+   * Atomically claims eligible pending events and expired leases, increments their fencing tokens, and returns them in
+   * PROCESSING state.
    */
   List<OutboxEvent> claimPending(
       Instant eligibleAt,
       int batchSize
   );
 
-  void markPublished(
+  /**
+   * Completes the transition only when the row is still PROCESSING and owned by this service instance with the supplied
+   * claim version. Returns {@code false} when ownership has changed.
+   */
+  boolean markPublished(
       OutboxId id,
+      long claimVersion,
       BrokerPublishResult result
   );
 
-  void reschedule(
+  /** Returns {@code false} when the claim has been fenced by a newer owner/version. */
+  boolean reschedule(
       OutboxId id,
+      long claimVersion,
       int attemptCount,
       Instant nextAttemptAt,
       String failureReason
   );
 
-  void markFailed(
+  /** Returns {@code false} when the claim has been fenced by a newer owner/version. */
+  boolean markFailed(
       OutboxId id,
+      long claimVersion,
       int attemptCount,
       String failureReason
   );

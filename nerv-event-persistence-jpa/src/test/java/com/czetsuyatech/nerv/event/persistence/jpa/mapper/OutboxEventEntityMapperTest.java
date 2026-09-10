@@ -42,6 +42,7 @@ class OutboxEventEntityMapperTest {
     assertThat(mapped.getPayload()).isNull();
     assertThat(mapped.getLockedAt()).isNull();
     assertThat(mapped.getLockedBy()).isNull();
+    assertThat(mapped.getClaimVersion()).isZero();
     assertThat(mapped.getLastError()).isNull();
     assertThat(mapped.getCreatedAt()).isNull();
     assertThat(mapped.getUpdatedAt()).isNull();
@@ -64,6 +65,7 @@ class OutboxEventEntityMapperTest {
     entity.setAvailableAt(AVAILABLE_AT);
     entity.setLockedAt(null);
     entity.setLockedBy(null);
+    entity.setClaimVersion(7);
     entity.setLastError(null);
     entity.setPublishedAt(null);
 
@@ -85,8 +87,10 @@ class OutboxEventEntityMapperTest {
     assertThat(mapped.event().payload()).isEqualTo("decoded payload");
     assertThat(mapped.destination()).isEqualTo(new Destination("orders.created"));
     assertThat(mapped.status()).isEqualTo(OutboxStatus.PROCESSING);
+    assertThat(mapped.lockedBy()).isNull();
     assertThat(mapped.attemptCount()).isEqualTo(2);
     assertThat(mapped.nextAttemptAt()).isEqualTo(AVAILABLE_AT);
+    assertThat(mapped.claimVersion()).isEqualTo(7);
   }
 
   @Test
