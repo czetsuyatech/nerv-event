@@ -222,27 +222,33 @@ class OutboxDispatchSchedulerTest {
     }
 
     @Override
-    public void markPublished(
+    public boolean markPublished(
         OutboxId id,
+        long claimVersion,
         BrokerPublishResult result
     ) {
+      return true;
     }
 
     @Override
-    public void reschedule(
+    public boolean reschedule(
         OutboxId id,
+        long claimVersion,
         int attemptCount,
         Instant nextAttemptAt,
         String failureReason
     ) {
+      return true;
     }
 
     @Override
-    public void markFailed(
+    public boolean markFailed(
         OutboxId id,
+        long claimVersion,
         int attemptCount,
         String failureReason
     ) {
+      return true;
     }
   }
 

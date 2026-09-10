@@ -22,6 +22,7 @@ public record OutboxEventView(
     Instant availableAt,
     Instant lockedAt,
     String lockedBy,
+    long claimVersion,
     String lastError,
     Instant createdAt,
     Instant updatedAt,

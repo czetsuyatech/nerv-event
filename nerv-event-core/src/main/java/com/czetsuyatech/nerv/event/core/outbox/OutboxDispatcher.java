@@ -115,10 +115,15 @@ public final class OutboxDispatcher {
           )
       );
       try {
-        outboxService.markPublished(
+        boolean transitioned = outboxService.markPublished(
             outboxEvent.id(),
+            outboxEvent.claimVersion(),
             result
         );
+        if (!transitioned) {
+          logFenced(outboxEvent, "PUBLISHED");
+          return DispatchOutcome.UNRESOLVED;
+        }
       } catch (Exception exception) {
         log.error(
             "Unable to confirm published outbox event outboxId={} eventId={} errorType={}",
@@ -161,11 +166,16 @@ public final class OutboxDispatcher {
       failedAttemptCount = Math.incrementExact(event.attemptCount());
     } catch (ArithmeticException arithmeticException) {
       try {
-        outboxService.markFailed(
+        boolean transitioned = outboxService.markFailed(
             event.id(),
+            event.claimVersion(),
             Integer.MAX_VALUE,
             failureReason
         );
+        if (!transitioned) {
+          logFenced(event, "FAILED");
+          return DispatchOutcome.UNRESOLVED;
+        }
       } catch (Exception transitionException) {
         log.error(
             "Unable to mark outbox event failed after attempt count overflow outboxId={} eventId={} errorType={}",
@@ -210,12 +220,17 @@ public final class OutboxDispatcher {
             ),
             "retryPolicy returned null next eligible time"
         );
-        outboxService.reschedule(
+        boolean transitioned = outboxService.reschedule(
             event.id(),
+            event.claimVersion(),
             failedAttemptCount,
             nextAttemptAt,
             failureReason
         );
+        if (!transitioned) {
+          logFenced(event, "PENDING");
+          return DispatchOutcome.UNRESOLVED;
+        }
         log.warn(
             "Outbox event delivery failed; retry scheduled outboxId={} eventId={} eventType={} destination={} correlationId={} attemptCount={} nextAttemptAt={} errorType={}",
             event.id().value(),
@@ -240,11 +255,16 @@ public final class OutboxDispatcher {
       }
     } else {
       try {
-        outboxService.markFailed(
+        boolean transitioned = outboxService.markFailed(
             event.id(),
+            event.claimVersion(),
             failedAttemptCount,
             failureReason
         );
+        if (!transitioned) {
+          logFenced(event, "FAILED");
+          return DispatchOutcome.UNRESOLVED;
+        }
       } catch (Exception transitionException) {
         log.error(
             "Unable to mark outbox event failed outboxId={} eventId={} errorType={}",
@@ -272,6 +292,17 @@ public final class OutboxDispatcher {
   private static String failureReason(Exception exception) {
     String message = exception.getMessage();
     return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
+  }
+
+  private static void logFenced(OutboxEvent event, String transition) {
+    log.warn(
+        "Outbox transition fenced outboxId={} eventId={} owner={} claimVersion={} transition={}",
+        event.id().value(),
+        event.event().id().value(),
+        event.lockedBy(),
+        event.claimVersion(),
+        transition
+    );
   }
 
   private enum DispatchOutcome {

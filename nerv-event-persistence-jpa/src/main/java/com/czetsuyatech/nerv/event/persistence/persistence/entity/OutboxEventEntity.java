@@ -78,6 +78,9 @@ public class OutboxEventEntity {
   @Column(name = "locked_by", length = 128)
   private String lockedBy;
 
+  @Column(name = "claim_version", nullable = false)
+  private long claimVersion;
+
   @Column(name = "last_error", length = 2048)
   private String lastError;
 

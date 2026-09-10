@@ -290,34 +290,44 @@ class PostgresClaimConcurrencyIT {
     assertThat(outbox(expired).getLockedBy()).isEqualTo("pod-b");
     assertThat(outbox(expired).getLockedAt()).isEqualTo(NOW);
 
-    assertThatThrownBy(
-        () -> outboxB.markPublished(
+    assertThat(
+        outboxB.markPublished(
             new OutboxId(active),
+            0,
             new BrokerPublishResult("ack")
         )
-    )
-        .isInstanceOf(EventStateTransitionException.class);
-    assertThatThrownBy(
-        () -> outboxB.reschedule(
+    ).isFalse();
+    assertThat(
+        outboxB.reschedule(
             new OutboxId(active),
+            0,
             1,
             NOW.plusSeconds(30),
             "failed"
         )
-    )
-        .isInstanceOf(EventStateTransitionException.class);
-    assertThatThrownBy(
-        () -> outboxB.markFailed(
+    ).isFalse();
+    assertThat(
+        outboxB.markFailed(
             new OutboxId(active),
+            0,
             1,
             "failed"
         )
-    )
-        .isInstanceOf(EventStateTransitionException.class);
-    outboxA.markPublished(
-        new OutboxId(active),
-        new BrokerPublishResult("ack")
-    );
+    ).isFalse();
+    assertThat(
+        outboxA.markPublished(
+            new OutboxId(active),
+            1,
+            new BrokerPublishResult("wrong-version")
+        )
+    ).isFalse();
+    assertThat(
+        outboxA.markPublished(
+            new OutboxId(active),
+            0,
+            new BrokerPublishResult("ack")
+        )
+    ).isTrue();
     assertThat(outbox(active).getStatus()).isEqualTo(OutboxStatus.PUBLISHED);
   }
 
@@ -329,22 +339,62 @@ class PostgresClaimConcurrencyIT {
         null,
         null
     );
-    assertThat(
-        outboxA.claimPending(
-            NOW,
-            1
-        )
-    ).hasSize(1); // broker publish succeeds; no markPublished follows.
+    OutboxEvent claimA = outboxA.claimPending(
+        NOW,
+        1
+    ).getFirst(); // broker publish succeeds; no markPublished follows.
+    assertThat(claimA.claimVersion()).isEqualTo(1);
 
-    assertThat(
-        outboxB.claimPending(
-            NOW.plus(LEASE).plusSeconds(1),
-            1
-        )
-    ).extracting(event -> event.id().value())
-        .containsExactly(id);
+    OutboxEvent claimB = outboxB.claimPending(
+        NOW.plus(LEASE).plusSeconds(1),
+        1
+    ).getFirst(); // a second broker publication remains possible under at-least-once delivery.
+    assertThat(claimB.id().value()).isEqualTo(id);
+    assertThat(claimB.claimVersion()).isEqualTo(2);
     assertThat(outbox(id).getStatus()).isEqualTo(OutboxStatus.PROCESSING);
     assertThat(outbox(id).getLockedBy()).isEqualTo("pod-b");
+
+    assertThat(
+        outboxA.markPublished(
+            claimA.id(),
+            claimA.claimVersion(),
+            new BrokerPublishResult("stale-ack")
+        )
+    ).isFalse();
+    assertThat(
+        outboxA.reschedule(
+            claimA.id(),
+            claimA.claimVersion(),
+            1,
+            NOW.plusSeconds(30),
+            "stale retry"
+        )
+    ).isFalse();
+    assertThat(
+        outboxA.markFailed(
+            claimA.id(),
+            claimA.claimVersion(),
+            1,
+            "stale failure"
+        )
+    ).isFalse();
+
+    OutboxEventEntity stillOwnedByB = outbox(id);
+    assertThat(stillOwnedByB.getStatus()).isEqualTo(OutboxStatus.PROCESSING);
+    assertThat(stillOwnedByB.getLockedBy()).isEqualTo("pod-b");
+    assertThat(stillOwnedByB.getLockedAt()).isEqualTo(NOW.plus(LEASE).plusSeconds(1));
+    assertThat(stillOwnedByB.getClaimVersion()).isEqualTo(2);
+    assertThat(stillOwnedByB.getAttemptCount()).isZero();
+    assertThat(stillOwnedByB.getLastError()).isNull();
+
+    assertThat(
+        outboxB.markPublished(
+            claimB.id(),
+            claimB.claimVersion(),
+            new BrokerPublishResult("current-ack")
+        )
+    ).isTrue();
+    assertThat(outbox(id).getStatus()).isEqualTo(OutboxStatus.PUBLISHED);
   }
 
   @Test
@@ -639,6 +689,7 @@ class PostgresClaimConcurrencyIT {
         }
         repository.markPublished(
             event.id(),
+            event.claimVersion(),
             new BrokerPublishResult("resilience-ack")
         );
         completed++;

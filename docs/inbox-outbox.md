@@ -2,9 +2,11 @@
 
 ## Outbox
 
-Publishing creates a `PENDING` durable row. When an application supplies the required core `RetryPolicy`, workers atomically claim eligible rows with an owner and lease, changing them to `PROCESSING`. A broker acknowledgement moves the row to `PUBLISHED`. A send failure is returned to `PENDING` while that policy permits it, or becomes `FAILED` when exhausted. `attemptCount`, `availableAt`, `lockedAt`, and `lockedBy` make retry and lease recovery visible.
+Publishing creates a `PENDING` durable row. When an application supplies the required core `RetryPolicy`, workers atomically claim eligible rows with an owner and lease, changing them to `PROCESSING`. Every claim or reclaim increments the durable `claimVersion` fencing token. A broker acknowledgement moves the row to `PUBLISHED`. A send failure is returned to `PENDING` while that policy permits it, or becomes `FAILED` when exhausted. `attemptCount`, `availableAt`, `lockedAt`, `lockedBy`, and `claimVersion` make retry and ownership visible.
 
-Multiple pods may run workers. Short database claims and leases prevent simultaneous active ownership; no leader election or ShedLock is required. Delivery is at-least-once: a crash after broker acknowledgement but before `PUBLISHED` is durably recorded can cause a later duplicate send.
+Multiple pods may run workers. Short database claims and leases allow abandoned work to be recovered; the fencing token prevents an old worker from publishing a durable state transition after a newer claim has taken ownership. Every worker-owned transition from `PROCESSING` checks the row id, status, owner, and exact `claimVersion`. A rejected transition is reported as an unresolved dispatch outcome and does not modify the newer claim. No leader election or ShedLock is required.
+
+Fencing protects Outbox database state, not broker exactly-once publication. A worker can publish successfully, stall until its lease expires, and then be fenced only after another worker publishes the same event. Delivery therefore remains at-least-once, and the Inbox/idempotency layer is responsible for making duplicate delivery safe.
 
 ## Inbox
 

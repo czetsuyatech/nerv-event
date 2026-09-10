@@ -197,6 +197,8 @@ class OutboxServiceImplTest {
     assertThat(stored.getStatus()).isEqualTo(OutboxStatus.PROCESSING);
     assertThat(stored.getLockedAt()).isEqualTo(NOW);
     assertThat(stored.getLockedBy()).isEqualTo("worker-a");
+    assertThat(stored.getClaimVersion()).isEqualTo(1);
+    assertThat(claimedEvents.getFirst().claimVersion()).isEqualTo(1);
   }
 
   @Test
@@ -230,6 +232,7 @@ class OutboxServiceImplTest {
 
     assertThat(claimedEvents).hasSize(1);
     assertThat(find(event.id()).getLockedBy()).isEqualTo("worker-a");
+    assertThat(find(event.id()).getClaimVersion()).isEqualTo(1);
   }
 
   @Test
@@ -249,6 +252,57 @@ class OutboxServiceImplTest {
 
     assertThat(claimedEvents).isEmpty();
     assertThat(find(event.id()).getLockedBy()).isEqualTo("active-worker");
+  }
+
+  @Test
+  void staleWorkerCannotMutateAReclaimedEventAndCurrentWorkerCanComplete() {
+    OutboxEvent event = pendingEvent(NOW);
+    save(event);
+    OutboxEvent claimA = workerARepository.claimPending(NOW, 1).getFirst();
+    OutboxEvent claimB = workerBRepository.claimPending(NOW.plus(Duration.ofMinutes(1)).plusSeconds(1), 1).getFirst();
+
+    assertThat(claimA.claimVersion()).isEqualTo(1);
+    assertThat(claimB.claimVersion()).isEqualTo(2);
+    assertThat(
+        workerARepository.markPublished(
+            claimA.id(),
+            claimA.claimVersion(),
+            new BrokerPublishResult("stale-ack")
+        )
+    ).isFalse();
+    assertThat(
+        workerARepository.reschedule(
+            claimA.id(),
+            claimA.claimVersion(),
+            1,
+            NOW.plusSeconds(30),
+            "stale retry"
+        )
+    ).isFalse();
+    assertThat(
+        workerARepository.markFailed(
+            claimA.id(),
+            claimA.claimVersion(),
+            1,
+            "stale failure"
+        )
+    ).isFalse();
+
+    OutboxEventEntity stillOwnedByB = find(event.id());
+    assertThat(stillOwnedByB.getStatus()).isEqualTo(OutboxStatus.PROCESSING);
+    assertThat(stillOwnedByB.getLockedBy()).isEqualTo("worker-b");
+    assertThat(stillOwnedByB.getClaimVersion()).isEqualTo(2);
+    assertThat(stillOwnedByB.getAttemptCount()).isZero();
+    assertThat(stillOwnedByB.getLastError()).isNull();
+
+    assertThat(
+        workerBRepository.markPublished(
+            claimB.id(),
+            claimB.claimVersion(),
+            new BrokerPublishResult("current-ack")
+        )
+    ).isTrue();
+    assertThat(find(event.id()).getStatus()).isEqualTo(OutboxStatus.PUBLISHED);
   }
 
   @Test
@@ -357,6 +411,7 @@ class OutboxServiceImplTest {
 
     workerARepository.markPublished(
         event.id(),
+        event.claimVersion(),
         new BrokerPublishResult("ack-1")
     );
 
@@ -376,6 +431,7 @@ class OutboxServiceImplTest {
 
     workerARepository.reschedule(
         event.id(),
+        event.claimVersion(),
         2,
         nextAttempt,
         failureReason
@@ -396,6 +452,7 @@ class OutboxServiceImplTest {
 
     workerARepository.markFailed(
         event.id(),
+        event.claimVersion(),
         3,
         "delivery rejected"
     );
@@ -480,11 +537,10 @@ class OutboxServiceImplTest {
   private OutboxEvent claimedEvent() {
     OutboxEvent event = pendingEvent(NOW);
     save(event);
-    workerARepository.claimPending(
+    return workerARepository.claimPending(
         NOW,
         1
-    );
-    return event;
+    ).getFirst();
   }
 
   private void save(OutboxEvent event) {
@@ -566,7 +622,9 @@ class OutboxServiceImplTest {
         event.destination(),
         event.attemptCount(),
         event.nextAttemptAt(),
-        status
+        status,
+        "worker-a",
+        1
     );
   }
 

@@ -6,7 +6,7 @@
 
   <groupId>com.czetsuyatech.nerv</groupId>
   <artifactId>nerv-event</artifactId>
-  <version>1.1.0</version>
+  <version>2.0.0</version>
   <packaging>pom</packaging>
   <name>Nerv Event</name>
   <description>Broker-neutral event infrastructure foundation.</description>
@@ -61,7 +61,7 @@
     <maven.enforcer.plugin.version>3.5.0</maven.enforcer.plugin.version>
     <formatter.maven.plugin.version>2.29.0</formatter.maven.plugin.version>
     <spring-boot.version>4.1.0</spring-boot.version>
-    <spring-cloud-aws.version>4.1.0</spring-cloud-aws.version>
+    <spring-cloud-aws.version>4.1.1</spring-cloud-aws.version>
     <testcontainers.version>2.0.5</testcontainers.version>
     <mapstruct.version>1.6.3</mapstruct.version>
     <lombok.version>1.18.42</lombok.version>

@@ -6,9 +6,12 @@
 
 Publishing directly to a broker from a business transaction creates a failure window: the database can commit while the broker send fails, or the broker can receive an event while the database rolls back. `nerv-event` writes an Outbox record in the same transaction as the business update and sends it later. On the consumer side it persists an Inbox record before acknowledging the broker message.
 
-Key capabilities include transactional Outbox publication, durable Inbox processing, Kafka and SQS adapters, multiple SQS clients/accounts, configuration-driven broker consumers, broker-neutral `EventHandler`s, database-backed retry, `EventRetryableException`, PostgreSQL migrations, observability, operations/manual recovery, retention, and multi-pod-safe claims.
+Key capabilities include transactional Outbox publication, durable Inbox processing, Kafka and SQS adapters, multiple SQS clients/accounts, configuration-driven broker consumers, broker-neutral `EventHandler`s, database-backed retry, `EventRetryableException`, PostgreSQL migrations, observability, operations/manual recovery, retention, and multi-pod-safe claims with Outbox fencing tokens.
 
 ## Installation
+
+This source tree targets `2.0.0`. Applications upgrading from 1.x must apply the new Outbox fencing
+migration and update any direct `OutboxService` integrations; see [Upgrading to 2.0](docs/upgrading-to-2.0.md).
 
 For normal Spring Boot applications, add the public starter:
 
@@ -82,6 +85,7 @@ The detailed module and lifecycle view is in [Architecture](docs/architecture.md
 - [Kafka](docs/kafka.md) and [SQS](docs/sqs.md)
 - [Database](docs/database.md), [Operations](docs/operations.md), and [Observability](docs/observability.md)
 - [Production guide and limitations](docs/production-guide.md)
+- [Upgrading from 1.x to 2.0](docs/upgrading-to-2.0.md)
 
 The runnable adoption reference is [`nerv-examples/nerv-event-spring-boot-demo`](../nerv-examples/nerv-event-spring-boot-demo).
 

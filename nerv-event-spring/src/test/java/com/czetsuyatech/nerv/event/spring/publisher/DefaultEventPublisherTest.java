@@ -111,16 +111,18 @@ class DefaultEventPublisherTest {
     }
 
     @Override
-    public void markPublished(
+    public boolean markPublished(
         OutboxId id,
+        long claimVersion,
         BrokerPublishResult result
     ) {
       throw new UnsupportedOperationException();
     }
 
     @Override
-    public void reschedule(
+    public boolean reschedule(
         OutboxId id,
+        long claimVersion,
         int attemptCount,
         Instant nextAttemptAt,
         String failureReason
@@ -129,8 +131,9 @@ class DefaultEventPublisherTest {
     }
 
     @Override
-    public void markFailed(
+    public boolean markFailed(
         OutboxId id,
+        long claimVersion,
         int attemptCount,
         String failureReason
     ) {

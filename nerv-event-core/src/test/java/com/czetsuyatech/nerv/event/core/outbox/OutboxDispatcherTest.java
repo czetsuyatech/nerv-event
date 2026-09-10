@@ -126,8 +126,9 @@ class OutboxDispatcherTest {
   void countsAnUnresolvedEventWhenThePublishedTransitionFails() {
     RecordingOutboxService repository = new RecordingOutboxService(List.of(outboxEvent(0))) {
       @Override
-      public void markPublished(
+      public boolean markPublished(
           OutboxId id,
+          long claimVersion,
           BrokerPublishResult result
       ) {
         throw new IllegalStateException("database unavailable");
@@ -157,6 +158,76 @@ class OutboxDispatcherTest {
             1
         )
     );
+  }
+
+  @Test
+  void countsAnUnresolvedEventWhenThePublishedTransitionIsFenced() {
+    RecordingOutboxService repository = new RecordingOutboxService(List.of(outboxEvent(0))) {
+      @Override
+      public boolean markPublished(
+          OutboxId id,
+          long claimVersion,
+          BrokerPublishResult result
+      ) {
+        return false;
+      }
+    };
+
+    DispatchResult result = dispatcher(
+        repository,
+        retryPolicy(true),
+        Clock.systemUTC(),
+        successfulProducer()
+    ).dispatch(1);
+
+    assertThat(result).isEqualTo(new DispatchResult(1, 0, 0, 0, 1));
+  }
+
+  @Test
+  void countsAnUnresolvedEventWhenTheRetryTransitionIsFenced() {
+    RecordingOutboxService repository = new RecordingOutboxService(List.of(outboxEvent(0))) {
+      @Override
+      public boolean reschedule(
+          OutboxId id,
+          long claimVersion,
+          int attemptCount,
+          Instant nextAttemptAt,
+          String failureReason
+      ) {
+        return false;
+      }
+    };
+
+    DispatchResult result = dispatcher(
+        repository,
+        retryPolicy(true),
+        Clock.systemUTC()
+    ).dispatch(1);
+
+    assertThat(result).isEqualTo(new DispatchResult(1, 0, 0, 0, 1));
+  }
+
+  @Test
+  void countsAnUnresolvedEventWhenTheFailedTransitionIsFenced() {
+    RecordingOutboxService repository = new RecordingOutboxService(List.of(outboxEvent(0))) {
+      @Override
+      public boolean markFailed(
+          OutboxId id,
+          long claimVersion,
+          int attemptCount,
+          String failureReason
+      ) {
+        return false;
+      }
+    };
+
+    DispatchResult result = dispatcher(
+        repository,
+        retryPolicy(false),
+        Clock.systemUTC()
+    ).dispatch(1);
+
+    assertThat(result).isEqualTo(new DispatchResult(1, 0, 0, 0, 1));
   }
 
   @Test
@@ -228,13 +299,15 @@ class OutboxDispatcherTest {
         )
     ) {
       @Override
-      public void markPublished(
+      public boolean markPublished(
           OutboxId id,
+          long claimVersion,
           BrokerPublishResult result
       ) {
         if (publishedTransitions.incrementAndGet() == 1) {
           throw new IllegalStateException("database unavailable");
         }
+        return true;
       }
     };
 
@@ -420,31 +493,37 @@ class OutboxDispatcherTest {
     }
 
     @Override
-    public void markPublished(
+    public boolean markPublished(
         OutboxId id,
+        long claimVersion,
         BrokerPublishResult result
     ) {
+      return true;
     }
 
     @Override
-    public void reschedule(
+    public boolean reschedule(
         OutboxId id,
+        long claimVersion,
         int attemptCount,
         Instant nextAttemptAt,
         String failureReason
     ) {
       rescheduledAttemptCount = attemptCount;
       this.nextAttemptAt = nextAttemptAt;
+      return true;
     }
 
     @Override
-    public void markFailed(
+    public boolean markFailed(
         OutboxId id,
+        long claimVersion,
         int attemptCount,
         String failureReason
     ) {
       failedAttemptCount = attemptCount;
       this.failureReason = failureReason;
+      return true;
     }
   }
 
