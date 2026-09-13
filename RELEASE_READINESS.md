@@ -76,7 +76,7 @@ no signing or Central deployment was attempted in this audit.
 
 ## Compatibility
 
-- Coordinates: `com.czetsuyatech.nerv`; current version `2.0.0`.
+- Coordinates: `com.czetsuyatech.nerv`; current version `2.1.0`.
 - Version 2.0.0 intentionally changes the public `OutboxService` post-claim transition contract.
   See [Upgrading to 2.0](docs/upgrading-to-2.0.md).
 - Java bytecode target: 21.

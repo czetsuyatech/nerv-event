@@ -2,6 +2,7 @@ package com.czetsuyatech.nerv.event.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,19 @@ class EventPublicationTest {
 
     assertThat(publication.event()).isSameAs(EVENT);
     assertThat(publication.destination()).isEqualTo(DESTINATION);
+    assertThat(publication.orderingKey()).isNull();
+  }
+
+  @Test
+  void acceptsAnOptionalOrderingKey() {
+    EventPublication<String> publication = new EventPublication<>(EVENT, DESTINATION, "customer-42");
+
+    assertThat(publication.orderingKey()).isEqualTo("customer-42");
+  }
+
+  @Test
+  void rejectsABlankOrderingKey() {
+    assertThatIllegalArgumentException().isThrownBy(() -> new EventPublication<>(EVENT, DESTINATION, " "));
   }
 
   @Test

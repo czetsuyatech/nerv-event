@@ -47,6 +47,24 @@ public interface InboxService {
   );
 
   /**
+   * Executes local handler effects and the PROCESSING to PROCESSED transition in one persistence transaction when the
+   * adapter supports transactions. Custom persistence adapters must override this method to provide that guarantee.
+   */
+  default void process(
+      EventId eventId,
+      String owner,
+      Instant processedAt,
+      Runnable handler
+  ) {
+    handler.run();
+    try {
+      markProcessed(eventId, owner, processedAt);
+    } catch (RuntimeException exception) {
+      throw new InboxCompletionException(exception);
+    }
+  }
+
+  /**
    * <p>
    * Records a handler failure that remains eligible for automatic retry.
    * </p>

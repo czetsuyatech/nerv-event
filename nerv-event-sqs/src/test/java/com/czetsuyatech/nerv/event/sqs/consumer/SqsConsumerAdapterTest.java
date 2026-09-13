@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -82,6 +83,7 @@ class SqsConsumerAdapterTest {
             any()
         )
     ).thenReturn(Optional.of(processing));
+    doCallRealMethod().when(repository).process(any(), anyString(), any(), any());
   }
 
   @Test

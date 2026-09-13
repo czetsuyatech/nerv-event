@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.czetsuyatech.nerv.event.core.inbox.InboxService;
 import com.czetsuyatech.nerv.event.core.outbox.OutboxService;
+import com.czetsuyatech.nerv.event.core.retry.RetryPolicy;
 import com.czetsuyatech.nerv.event.persistence.persistence.entity.OutboxEventEntity;
 import com.czetsuyatech.nerv.event.persistence.persistence.repository.InboxEventRepository;
 import com.czetsuyatech.nerv.event.persistence.persistence.repository.OutboxEventRepository;
@@ -16,6 +17,7 @@ import com.czetsuyatech.nerv.event.services.OutboxOperationService;
 import com.czetsuyatech.nerv.event.starter.consumer.Order;
 import com.czetsuyatech.nerv.event.starter.consumer.OrderRepository;
 import jakarta.persistence.EntityManagerFactory;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
@@ -23,10 +25,14 @@ import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
 import org.springframework.boot.autoconfigure.condition.ConditionEvaluationReport;
 import org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 
 /**
  * Exercises the dependency set a normal application receives from the one public starter.
  */
+@Import(StarterConsumerContextTest.OutboxRetryConfiguration.class)
 @SpringBootTest(
     classes = com.czetsuyatech.nerv.event.starter.consumer.StarterConsumerApplication.class,
     properties = {
@@ -115,5 +121,26 @@ class StarterConsumerContextTest {
         .toList();
     assertThat(entityClasses.contains(Order.class)).isTrue();
     assertThat(entityClasses.contains(OutboxEventEntity.class)).isTrue();
+  }
+
+  @TestConfiguration(proxyBeanMethods = false)
+  static class OutboxRetryConfiguration {
+    @Bean
+    RetryPolicy retryPolicy() {
+      return new RetryPolicy() {
+        @Override
+        public boolean allowsRetry(int failedAttemptCount) {
+          return false;
+        }
+
+        @Override
+        public Instant nextEligibleAt(
+            int failedAttemptCount,
+            Instant failedAt
+        ) {
+          return failedAt;
+        }
+      };
+    }
   }
 }

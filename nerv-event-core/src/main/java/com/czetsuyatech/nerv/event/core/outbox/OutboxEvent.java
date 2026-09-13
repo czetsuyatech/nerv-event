@@ -18,6 +18,7 @@ public record OutboxEvent(
     int attemptCount,
     Instant nextAttemptAt,
     OutboxStatus status,
+    String orderingKey,
     String lockedBy,
     long claimVersion
 )
@@ -32,7 +33,21 @@ public record OutboxEvent(
       OutboxStatus status
   )
   {
-    this(id, event, destination, attemptCount, nextAttemptAt, status, null, 0);
+    this(id, event, destination, attemptCount, nextAttemptAt, status, null, null, 0);
+  }
+
+  public OutboxEvent(
+      OutboxId id,
+      EventMessage<?> event,
+      Destination destination,
+      int attemptCount,
+      Instant nextAttemptAt,
+      OutboxStatus status,
+      String lockedBy,
+      long claimVersion
+  )
+  {
+    this(id, event, destination, attemptCount, nextAttemptAt, status, null, lockedBy, claimVersion);
   }
 
   public OutboxEvent {
@@ -61,6 +76,9 @@ public record OutboxEvent(
     );
     if (claimVersion < 0) {
       throw new IllegalArgumentException("claimVersion must not be negative");
+    }
+    if (orderingKey != null && orderingKey.isBlank()) {
+      throw new IllegalArgumentException("orderingKey must not be blank when configured");
     }
   }
 }

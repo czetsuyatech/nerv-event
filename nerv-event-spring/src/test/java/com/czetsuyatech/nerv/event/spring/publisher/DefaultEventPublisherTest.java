@@ -43,7 +43,8 @@ class DefaultEventPublisherTest {
     );
     EventPublication<String> publication = new EventPublication<>(
         event,
-        new Destination("orders")
+        new Destination("orders"),
+        "customer-42"
     );
 
     EventId publishedEventId = publisher.publish(publication);
@@ -53,6 +54,7 @@ class DefaultEventPublisherTest {
       assertThat(outboxEvent.id()).isEqualTo(new OutboxId("outbox-1"));
       assertThat(outboxEvent.event()).isSameAs(event);
       assertThat(outboxEvent.destination()).isEqualTo(new Destination("orders"));
+      assertThat(outboxEvent.orderingKey()).isEqualTo("customer-42");
       assertThat(outboxEvent.status()).isEqualTo(OutboxStatus.PENDING);
       assertThat(outboxEvent.attemptCount()).isZero();
       assertThat(outboxEvent.nextAttemptAt()).isEqualTo(NOW);

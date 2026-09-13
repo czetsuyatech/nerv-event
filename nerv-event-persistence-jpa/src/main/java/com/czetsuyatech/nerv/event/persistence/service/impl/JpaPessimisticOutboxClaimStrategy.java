@@ -61,6 +61,7 @@ public final class JpaPessimisticOutboxClaimStrategy implements OutboxClaimStrat
         OutboxStatus.PROCESSING,
         claimedAt,
         expiredLeaseAt,
+        List.of(OutboxStatus.PENDING, OutboxStatus.PROCESSING),
         PageRequest.of(
             0,
             batchSize

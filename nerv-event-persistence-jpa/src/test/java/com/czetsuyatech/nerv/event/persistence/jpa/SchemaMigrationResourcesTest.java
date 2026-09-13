@@ -16,7 +16,8 @@ class SchemaMigrationResourcesTest {
       "002-create-inbox.sql",
       "003-create-trace-context.sql",
       "004-create-indexes.sql",
-      "005-add-outbox-claim-version.sql"
+      "005-add-outbox-claim-version.sql",
+      "006-add-outbox-ordering-key.sql"
   );
 
   @Test

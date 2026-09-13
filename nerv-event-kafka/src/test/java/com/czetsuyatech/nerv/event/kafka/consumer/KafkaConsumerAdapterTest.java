@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -488,6 +489,7 @@ class KafkaConsumerAdapterTest {
             any()
         )
     ).thenReturn(Optional.of(reclaimed));
+    doCallRealMethod().when(inbox).process(any(), any(), any(), any());
     InboxRetryPolicy retryPolicy = retryPolicy(true);
 
     adapter(
@@ -878,6 +880,7 @@ class KafkaConsumerAdapterTest {
             any()
         )
     ).thenReturn(Optional.of(processing));
+    doCallRealMethod().when(inbox).process(any(), any(), any(), any());
     return inbox;
   }
 

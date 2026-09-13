@@ -44,10 +44,11 @@ import java.time.Clock;
 import java.util.function.DoubleSupplier;
 import java.util.List;
 import java.util.Optional;
-import java.util.random.RandomGenerator;
+import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.core.env.Environment;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -55,6 +56,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Condition;
+import org.springframework.context.annotation.ConditionContext;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import tools.jackson.databind.ObjectMapper;
@@ -115,6 +120,7 @@ public class NervEventAutoConfiguration {
   @Bean
   @ConditionalOnBean(OutboxService.class)
   @ConditionalOnMissingBean(EventPublisher.class)
+  @Conditional(OutboxPublicationActiveCondition.class)
   EventPublisher eventPublisher(
       OutboxService outboxService,
       OutboxIdGenerator outboxIdGenerator,
@@ -130,6 +136,79 @@ public class NervEventAutoConfiguration {
         outboxIdGenerator,
         clock
     );
+  }
+
+  @Bean
+  SmartInitializingSingleton outboxConfigurationValidator(
+      NervEventProperties properties,
+      ObjectProvider<OutboxService> outboxService,
+      ObjectProvider<EventPublisher> eventPublisher,
+      ObjectProvider<OutboxDispatcher> outboxDispatcher,
+      ObjectProvider<RetryPolicy> retryPolicy
+  ) {
+    return () -> {
+      OutboxService configuredOutboxService = outboxService.getIfAvailable();
+      EventPublisher configuredEventPublisher = eventPublisher.getIfAvailable();
+      OutboxDispatcher configuredOutboxDispatcher = outboxDispatcher.getIfAvailable();
+      RetryPolicy configuredRetryPolicy = retryPolicy.getIfAvailable();
+      Boolean explicitlyEnabled = properties.getOutbox().getEnabled();
+      if (Boolean.FALSE.equals(explicitlyEnabled)) {
+        log.info("NERV Event Outbox publication is explicitly disabled");
+        return;
+      }
+      boolean publicationActive = configuredOutboxService != null
+          && (Boolean.TRUE.equals(explicitlyEnabled)
+              || configuredEventPublisher != null
+              || configuredOutboxDispatcher != null
+              || configuredRetryPolicy != null
+              || !properties.getDestinations().isEmpty());
+      if (!publicationActive) {
+        log.info("NERV Event Outbox publication is inactive; Inbox-only startup requires no Outbox opt-out");
+        return;
+      }
+      if (configuredOutboxDispatcher != null) {
+        log.info(
+            "NERV Event Outbox publishing configured dispatcherEnabled={} batchSize={} leaseDuration={}",
+            properties.getDispatcher().isEnabled(),
+            properties.getDispatcher().getBatchSize(),
+            properties.getDispatcher().getLeaseDuration()
+        );
+        return;
+      }
+      if (configuredRetryPolicy == null) {
+        throw new IllegalStateException(
+            "NERV Event Outbox publishing is enabled but no dispatch RetryPolicy bean is configured. "
+                + "Register a com.czetsuyatech.nerv.event.core.retry.RetryPolicy bean or set "
+                + "nerv.event.outbox.enabled=false."
+        );
+      }
+      throw new IllegalStateException(
+          "NERV Event Outbox publishing is enabled but no functional OutboxDispatcher is configured. "
+              + "Provide the dispatcher dependencies or a custom OutboxDispatcher, or set "
+              + "nerv.event.outbox.enabled=false."
+      );
+    };
+  }
+
+  static final class OutboxPublicationActiveCondition implements Condition {
+    @Override
+    public boolean matches(
+        ConditionContext context,
+        AnnotatedTypeMetadata metadata
+    ) {
+      Boolean enabled = context.getEnvironment().getProperty("nerv.event.outbox.enabled", Boolean.class);
+      if (Boolean.FALSE.equals(enabled)) {
+        return false;
+      }
+      if (Boolean.TRUE.equals(enabled)) {
+        return true;
+      }
+      if (context.getBeanFactory() == null) {
+        return false;
+      }
+      return context.getBeanFactory().getBeanNamesForType(RetryPolicy.class, false, false).length > 0
+          || context.getBeanFactory().getBeanNamesForType(OutboxDispatcher.class, false, false).length > 0;
+    }
   }
 
   @Bean
@@ -317,6 +396,11 @@ public class NervEventAutoConfiguration {
       RetryPolicy.class
   })
   @ConditionalOnMissingBean(OutboxDispatcher.class)
+  @ConditionalOnProperty(
+      prefix = "nerv.event.outbox",
+      name = "enabled",
+      havingValue = "true",
+      matchIfMissing = true)
   OutboxDispatcher outboxDispatcher(
       OutboxService outboxService,
       DestinationResolver destinationResolver,
@@ -342,6 +426,11 @@ public class NervEventAutoConfiguration {
   @Bean
   @ConditionalOnBean(OutboxDispatcher.class)
   @ConditionalOnMissingBean(OutboxDispatchScheduler.class)
+  @ConditionalOnProperty(
+      prefix = "nerv.event.outbox",
+      name = "enabled",
+      havingValue = "true",
+      matchIfMissing = true)
   @ConditionalOnProperty(
       prefix = "nerv.event.dispatcher",
       name = "enabled",
@@ -378,6 +467,11 @@ public class NervEventAutoConfiguration {
   @ConditionalOnBean(OutboxDispatcher.class)
   @ConditionalOnMissingBean(name = "nervEventTaskScheduler")
   @ConditionalOnProperty(
+      prefix = "nerv.event.outbox",
+      name = "enabled",
+      havingValue = "true",
+      matchIfMissing = true)
+  @ConditionalOnProperty(
       prefix = "nerv.event.dispatcher",
       name = "enabled",
       havingValue = "true",
@@ -394,7 +488,7 @@ public class NervEventAutoConfiguration {
       NervEventProperties.Dispatcher properties
   ) {
     NervEventProperties.Dispatcher.Polling polling = properties.getPolling();
-    DoubleSupplier random = RandomGenerator.getDefault()::nextDouble;
+    DoubleSupplier random = () -> ThreadLocalRandom.current().nextDouble();
     return new DispatcherPollingPolicy(
         polling.getMinInterval(),
         polling.getMaxInterval(),
@@ -408,7 +502,7 @@ public class NervEventAutoConfiguration {
       NervEventProperties.Inbox.Dispatcher properties
   ) {
     NervEventProperties.Inbox.Dispatcher.Polling polling = properties.getPolling();
-    DoubleSupplier random = RandomGenerator.getDefault()::nextDouble;
+    DoubleSupplier random = () -> ThreadLocalRandom.current().nextDouble();
     return new DispatcherPollingPolicy(
         polling.getMinInterval(),
         polling.getMaxInterval(),
@@ -422,7 +516,7 @@ public class NervEventAutoConfiguration {
       NervEventProperties.Retention properties
   ) {
     NervEventProperties.Retention.Polling polling = properties.getPolling();
-    DoubleSupplier random = RandomGenerator.getDefault()::nextDouble;
+    DoubleSupplier random = () -> ThreadLocalRandom.current().nextDouble();
     return new DispatcherPollingPolicy(
         polling.getMinInterval(),
         polling.getMaxInterval(),

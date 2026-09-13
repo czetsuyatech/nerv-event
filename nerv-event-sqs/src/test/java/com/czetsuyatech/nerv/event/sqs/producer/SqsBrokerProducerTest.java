@@ -110,6 +110,36 @@ class SqsBrokerProducerTest {
   }
 
   @Test
+  void mapsOrderingKeyToFifoGroupingAndUsesEventIdForDeduplication() {
+    SqsAsyncClient client = successfulClient("id");
+    producer(
+        Map.of("orders", destination("a", "https://sqs.test/orders.fifo")),
+        List.of(registration("a", client)),
+        Duration.ofSeconds(1)
+    ).publish(message("orders", null, "customer-42"));
+
+    ArgumentCaptor<SendMessageRequest> captor = ArgumentCaptor.forClass(SendMessageRequest.class);
+    verify(client).sendMessage(captor.capture());
+    assertThat(captor.getValue().messageGroupId()).isEqualTo("customer-42");
+    assertThat(captor.getValue().messageDeduplicationId()).isEqualTo("event-1");
+  }
+
+  @Test
+  void ignoresOrderingKeyForAStandardQueue() {
+    SqsAsyncClient client = successfulClient("id");
+    producer(
+        Map.of("orders", destination("a", "https://sqs.test/orders")),
+        List.of(registration("a", client)),
+        Duration.ofSeconds(1)
+    ).publish(message("orders", null, "customer-42"));
+
+    ArgumentCaptor<SendMessageRequest> captor = ArgumentCaptor.forClass(SendMessageRequest.class);
+    verify(client).sendMessage(captor.capture());
+    assertThat(captor.getValue().messageGroupId()).isNull();
+    assertThat(captor.getValue().messageDeduplicationId()).isNull();
+  }
+
+  @Test
   void resolvesAConfiguredQueueNameBeforeSending() {
     SqsAsyncClient client = successfulClient("id");
     when(client.getQueueUrl(any(GetQueueUrlRequest.class))).thenReturn(
@@ -279,12 +309,21 @@ class SqsBrokerProducerTest {
       String target,
       String correlationId
   ) {
+    return message(target, correlationId, null);
+  }
+
+  private static BrokerMessage message(
+      String target,
+      String correlationId,
+      String orderingKey
+  ) {
     return new BrokerMessage(
         new EventId("event-1"),
         "OrderCreated",
         Instant.parse("2026-08-18T00:00:00Z"),
         "orders-service",
         correlationId,
+        orderingKey,
         target,
         new SerializedPayload(
             "{\"order\":42}",

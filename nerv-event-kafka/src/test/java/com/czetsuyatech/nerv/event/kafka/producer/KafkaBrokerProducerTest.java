@@ -120,6 +120,18 @@ class KafkaBrokerProducerTest {
   }
 
   @Test
+  void usesTheOrderingKeyAsTheKafkaRecordKey() {
+    KafkaTemplate<String, String> kafkaTemplate = acknowledgedKafkaTemplate();
+    KafkaBrokerProducer producer = new KafkaBrokerProducer(kafkaTemplate, Duration.ofSeconds(1));
+
+    producer.publish(message(null, "customer-42"));
+
+    ArgumentCaptor<ProducerRecord<String, String>> recordCaptor = ArgumentCaptor.forClass(ProducerRecord.class);
+    verify(kafkaTemplate).send(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().key()).isEqualTo("customer-42");
+  }
+
+  @Test
   void omitsTheCorrelationHeaderWhenTheEventHasABlankCorrelationId() {
     KafkaTemplate<String, String> kafkaTemplate = acknowledgedKafkaTemplate();
     KafkaBrokerProducer producer = new KafkaBrokerProducer(
@@ -183,12 +195,20 @@ class KafkaBrokerProducerTest {
   }
 
   private static BrokerMessage message(String correlationId) {
+    return message(correlationId, null);
+  }
+
+  private static BrokerMessage message(
+      String correlationId,
+      String orderingKey
+  ) {
     return new BrokerMessage(
         new EventId("event-1"),
         "order.created",
         Instant.parse("2026-08-15T00:00:00Z"),
         "orders",
         correlationId,
+        orderingKey,
         "orders-topic",
         new SerializedPayload(
             "{\"orderId\":42}",

@@ -43,15 +43,19 @@ public final class DefaultEventPublisher implements EventPublisher {
         publication.destination(),
         0,
         availableAt,
-        OutboxStatus.PENDING
+        OutboxStatus.PENDING,
+        publication.orderingKey(),
+        null,
+        0
     );
     log.debug(
-        "Outbox event prepared outboxId={} eventId={} eventType={} destination={} correlationId={}",
+        "Outbox event prepared outboxId={} eventId={} eventType={} destination={} correlationId={} orderingKey={}",
         outboxEvent.id().value(),
         publication.event().id().value(),
         publication.event().type(),
         publication.destination().name(),
-        publication.event().correlationId()
+        publication.event().correlationId(),
+        publication.orderingKey()
     );
     outboxService.save(outboxEvent);
     log.debug(

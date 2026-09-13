@@ -216,6 +216,37 @@ class OutboxServiceImplTest {
   }
 
   @Test
+  void claimSerializesEventsWithTheSameOrderingKey() {
+    OutboxEvent first = pendingEvent(NOW, "payload-1", "customer-42");
+    OutboxEvent second = pendingEvent(NOW, "payload-2", "customer-42");
+    save(first);
+    save(second);
+
+    List<OutboxEvent> firstClaim = workerARepository.claimPending(NOW, 10);
+    List<OutboxEvent> blockedClaim = workerBRepository.claimPending(NOW, 10);
+
+    assertThat(firstClaim).hasSize(1);
+    assertThat(firstClaim.getFirst().orderingKey()).isEqualTo("customer-42");
+    assertThat(blockedClaim).isEmpty();
+    workerARepository.markPublished(
+        firstClaim.getFirst().id(),
+        firstClaim.getFirst().claimVersion(),
+        new BrokerPublishResult("published")
+    );
+    assertThat(workerBRepository.claimPending(NOW, 10)).hasSize(1);
+  }
+
+  @Test
+  void claimAllowsDifferentOrderingKeysInTheSameBatch() {
+    save(pendingEvent(NOW, "payload-1", "customer-1"));
+    save(pendingEvent(NOW, "payload-2", "customer-2"));
+
+    assertThat(workerARepository.claimPending(NOW, 10))
+        .extracting(OutboxEvent::orderingKey)
+        .containsExactlyInAnyOrder("customer-1", "customer-2");
+  }
+
+  @Test
   void claimReclaimsExpiredProcessingLease() {
     OutboxEvent event = pendingEvent(NOW.minusSeconds(120));
     save(event);
@@ -595,6 +626,14 @@ class OutboxServiceImplTest {
       Instant availableAt,
       Object payload
   ) {
+    return pendingEvent(availableAt, payload, null);
+  }
+
+  private OutboxEvent pendingEvent(
+      Instant availableAt,
+      Object payload,
+      String orderingKey
+  ) {
     return new OutboxEvent(
         new OutboxId(UUID.randomUUID().toString()),
         new EventMessage<>(
@@ -608,7 +647,10 @@ class OutboxServiceImplTest {
         new Destination("orders.created"),
         0,
         availableAt,
-        OutboxStatus.PENDING
+        OutboxStatus.PENDING,
+        orderingKey,
+        null,
+        0
     );
   }
 

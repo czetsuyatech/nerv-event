@@ -58,7 +58,7 @@ public class KafkaBrokerProducer implements BrokerProducer {
     );
     ProducerRecord<String, String> record = new ProducerRecord<>(
         message.target(),
-        null,
+        message.orderingKey(),
         message.payload().value()
     );
     addHeader(

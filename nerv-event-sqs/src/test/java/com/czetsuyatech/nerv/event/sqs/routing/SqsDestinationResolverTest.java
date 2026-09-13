@@ -26,13 +26,12 @@ class SqsDestinationResolverTest {
   }
 
   @Test
-  void rejectsFifoQueues() {
-    assertThatThrownBy(
-        () -> new SqsDestination(
-            new SqsClientId("account-a"),
-            "orders.fifo"
-        )
-    )
-        .hasMessage("FIFO SQS queue 'orders.fifo' is not supported by the current nerv-event SQS adapter");
+  void allowsFifoProducerDestinations() {
+    SqsDestination destination = new SqsDestination(
+        new SqsClientId("account-a"),
+        "orders.fifo"
+    );
+
+    assertThat(destination.queue()).isEqualTo("orders.fifo");
   }
 }

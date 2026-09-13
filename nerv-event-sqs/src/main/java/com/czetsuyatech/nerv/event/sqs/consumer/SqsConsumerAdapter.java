@@ -5,6 +5,7 @@ import com.czetsuyatech.nerv.event.core.consumer.ConsumerMessage;
 import com.czetsuyatech.nerv.event.core.consumer.DefaultInboxFailureClassifier;
 import com.czetsuyatech.nerv.event.core.consumer.InboxFailureClassifier;
 import com.czetsuyatech.nerv.event.core.inbox.InboxEvent;
+import com.czetsuyatech.nerv.event.core.inbox.InboxCompletionException;
 import com.czetsuyatech.nerv.event.core.inbox.InboxRegistration;
 import com.czetsuyatech.nerv.event.core.inbox.InboxService;
 import com.czetsuyatech.nerv.event.core.inbox.InboxRetryPolicy;
@@ -244,13 +245,27 @@ public final class SqsConsumerAdapter {
     long handlerStartedAt = System.nanoTime();
     observe(ConsumerMetrics::handlerExecutionStarted);
     try {
-      dispatcher.dispatch(message);
+      repository.process(
+          message.eventId(),
+          processingOwner,
+          clock.instant(),
+          () -> dispatcher.dispatch(message)
+      );
       observe(
           metrics -> metrics.handlerExecutionCompleted(
               ConsumerHandlerResult.SUCCESS,
               Duration.ofNanos(System.nanoTime() - handlerStartedAt)
           )
       );
+    } catch (InboxCompletionException exception) {
+      observe(
+          metrics -> metrics.handlerExecutionCompleted(
+              ConsumerHandlerResult.SUCCESS,
+              Duration.ofNanos(System.nanoTime() - handlerStartedAt)
+          )
+      );
+      observe(metrics -> metrics.outcome(ConsumerOutcome.UNRESOLVED));
+      throw new SqsConsumerProcessingException("MARK_PROCESSED", exception);
     } catch (RuntimeException handlerFailure) {
       observe(
           metrics -> metrics.handlerExecutionCompleted(
@@ -267,7 +282,7 @@ public final class SqsConsumerAdapter {
       );
       return;
     }
-    markProcessedThenAcknowledge(
+    acknowledgeProcessed(
         message,
         claimed,
         acknowledgement,
@@ -387,43 +402,18 @@ public final class SqsConsumerAdapter {
     }
   }
 
-  private void markProcessedThenAcknowledge(
+  private void acknowledgeProcessed(
       ConsumerMessage message,
       InboxEvent claimed,
       Runnable acknowledgement,
       String sqsMessageId
   ) {
-    try {
-      repository.markProcessed(
-          message.eventId(),
-          processingOwner,
-          clock.instant()
-      );
-      log.debug(
-          "SQS Inbox event processed eventId={} eventType={} attemptCount={}",
-          message.eventId().value(),
-          message.eventType(),
-          claimed.attemptCount()
-      );
-    } catch (RuntimeException exception) {
-      observe(metrics -> metrics.outcome(ConsumerOutcome.UNRESOLVED));
-      log.error(
-          "SQS handler completed but PROCESSED transition failed stage=MARK_PROCESSED "
-              + "eventId={} eventType={} queue={} messageId={} consumer={} clientId={} owner={}",
-          message.eventId().value(),
-          message.eventType(),
-          queue,
-          sqsMessageId,
-          consumerName,
-          clientId.value(),
-          processingOwner,
-          exception
-      );
-      throw new SqsConsumerProcessingException(
-          "MARK_PROCESSED",
-          exception
-      );
-    }
+    log.debug(
+        "SQS Inbox event processed eventId={} eventType={} attemptCount={}",
+        message.eventId().value(),
+        message.eventType(),
+        claimed.attemptCount()
+    );
     observe(metrics -> metrics.outcome(ConsumerOutcome.PROCESSED));
     acknowledge(
         message,

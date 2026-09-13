@@ -20,15 +20,23 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("""
       select event from OutboxEventEntity event
-      where (event.status = :pending and event.availableAt <= :claimedAt)
-         or (event.status = :processing and event.lockedAt <= :expiredLeaseAt)
-      order by event.createdAt asc
+      where ((event.status = :pending and event.availableAt <= :claimedAt)
+         or (event.status = :processing and event.lockedAt <= :expiredLeaseAt))
+        and (event.orderingKey is null or not exists (
+          select predecessor.id from OutboxEventEntity predecessor
+          where predecessor.orderingKey = event.orderingKey
+            and predecessor.status in :orderingBlockingStatuses
+            and (predecessor.createdAt < event.createdAt
+              or (predecessor.createdAt = event.createdAt and predecessor.id < event.id))
+        ))
+      order by event.createdAt asc, event.id asc
       """)
   List<OutboxEventEntity> findClaimableForUpdate(
       @Param("pending") OutboxStatus pending,
       @Param("processing") OutboxStatus processing,
       @Param("claimedAt") Instant claimedAt,
       @Param("expiredLeaseAt") Instant expiredLeaseAt,
+      @Param("orderingBlockingStatuses") List<OutboxStatus> orderingBlockingStatuses,
       Pageable pageable
   );
 
