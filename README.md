@@ -10,7 +10,7 @@ Key capabilities include transactional Outbox publication, atomic database-local
 
 ## Installation
 
-This source tree targets `2.0.0`. Applications upgrading from 1.x must apply the new Outbox fencing
+This source tree targets `2.1.0`. Applications upgrading from 1.x must apply the new Outbox fencing
 migration and update any direct `OutboxService` integrations; see [Upgrading to 2.0](docs/upgrading-to-2.0.md).
 
 For normal Spring Boot applications, add the public starter:
