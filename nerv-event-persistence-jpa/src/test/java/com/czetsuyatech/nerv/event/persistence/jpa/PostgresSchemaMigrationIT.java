@@ -285,7 +285,8 @@ class PostgresSchemaMigrationIT {
         "idx_nerv_outbox_status_locked",
         "idx_nerv_outbox_status_published",
         "idx_nerv_outbox_status_updated",
-        "idx_nerv_outbox_event_id"
+        "idx_nerv_outbox_event_id",
+        "idx_nerv_outbox_ordering_sequence"
     );
   }
 

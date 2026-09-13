@@ -20,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
     properties = {
         "spring.datasource.url=jdbc:h2:mem:nerv-custom-jpa;DB_CLOSE_DELAY=-1",
         "spring.jpa.hibernate.ddl-auto=create-drop",
+        "nerv.event.outbox.enabled=false",
         "nerv.event.dispatcher.enabled=false",
         "nerv.event.inbox.dispatcher.enabled=false",
         "nerv.event.retention.enabled=false"

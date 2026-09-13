@@ -23,10 +23,5 @@ public record SqsDestination(
     if (queue.isBlank()) {
       throw new IllegalArgumentException("queue must not be blank");
     }
-    if (queue.endsWith(".fifo")) {
-      throw new IllegalArgumentException(
-          "FIFO SQS queue '" + queue + "' is not supported by the current nerv-event SQS adapter"
-      );
-    }
   }
 }

@@ -24,6 +24,7 @@ public interface OutboxEventMapper {
   @Mapping(target = "correlationId", source = "event.correlationId")
   @Mapping(target = "eventTimestamp", source = "event.timestamp")
   @Mapping(target = "destination", source = "destination")
+  @Mapping(target = "orderingKey", source = "orderingKey")
   @Mapping(target = "payload", ignore = true)
   @Mapping(target = "availableAt", source = "nextAttemptAt")
   @Mapping(target = "lockedAt", ignore = true)
@@ -42,6 +43,7 @@ public interface OutboxEventMapper {
   @Mapping(target = "attemptCount", source = "entity.attemptCount")
   @Mapping(target = "nextAttemptAt", source = "entity.availableAt")
   @Mapping(target = "status", source = "entity.status")
+  @Mapping(target = "orderingKey", source = "entity.orderingKey")
   @Mapping(target = "lockedBy", source = "entity.lockedBy")
   @Mapping(target = "claimVersion", source = "entity.claimVersion")
   OutboxEvent toCore(

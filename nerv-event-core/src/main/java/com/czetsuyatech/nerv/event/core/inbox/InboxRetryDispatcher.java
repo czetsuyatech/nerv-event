@@ -139,7 +139,20 @@ public final class InboxRetryDispatcher {
         event.attemptCount()
     );
     try {
-      consumerDispatcher.dispatch(toConsumerMessage(event));
+      inboxService.process(
+          event.eventId(),
+          owner,
+          clock.instant(),
+          () -> consumerDispatcher.dispatch(toConsumerMessage(event))
+      );
+    } catch (InboxCompletionException exception) {
+      log.error(
+          "Unable to commit inbox retry handler effects with PROCESSED state; outcome is unresolved eventId={} eventType={}",
+          event.eventId().value(),
+          event.eventType(),
+          exception
+      );
+      return InboxRetryOutcome.UNRESOLVED;
     } catch (Exception exception) {
       return handleHandlerFailure(
           event,
@@ -147,29 +160,13 @@ public final class InboxRetryDispatcher {
       );
     }
 
-    try {
-      inboxService.markProcessed(
-          event.eventId(),
-          owner,
-          clock.instant()
-      );
-      log.debug(
-          "Inbox retry event processed eventId={} eventType={} attemptCount={}",
-          event.eventId().value(),
-          event.eventType(),
-          event.attemptCount()
-      );
-      return InboxRetryOutcome.PROCESSED;
-    } catch (Exception exception) {
-      log.error(
-          "Unable to mark inbox retry event processed; outcome is unresolved eventId={} eventType={} errorType={}",
-          event.eventId().value(),
-          event.eventType(),
-          exception.getClass().getSimpleName(),
-          exception
-      );
-      return InboxRetryOutcome.UNRESOLVED;
-    }
+    log.debug(
+        "Inbox retry event processed eventId={} eventType={} attemptCount={}",
+        event.eventId().value(),
+        event.eventType(),
+        event.attemptCount()
+    );
+    return InboxRetryOutcome.PROCESSED;
   }
 
   private InboxRetryOutcome handleHandlerFailure(

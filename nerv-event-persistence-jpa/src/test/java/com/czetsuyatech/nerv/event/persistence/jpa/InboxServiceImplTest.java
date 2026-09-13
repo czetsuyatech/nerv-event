@@ -67,6 +67,7 @@ class InboxServiceImplTest {
     inboxService = applicationContext.getBean(InboxService.class);
     entityManager = applicationContext.getBean(EntityManager.class);
     store = applicationContext.getBean(TransactionalStore.class);
+    store.createHandlerEffects();
   }
 
   @AfterAll
@@ -77,6 +78,73 @@ class InboxServiceImplTest {
   @BeforeEach
   void clearInbox() {
     store.clear();
+  }
+
+  @Test
+  void commitsHandlerDatabaseEffectsAndProcessedStateAtomically() {
+    InboxEvent event = receivedEvent("{}");
+    inboxService.register(event);
+    inboxService.claim(event.eventId(), NOW, "worker-a", LEASE);
+
+    inboxService.process(event.eventId(), "worker-a", NOW, () -> store.addHandlerEffect(event.eventId()));
+
+    assertThat(store.handlerEffectCount(event.eventId())).isEqualTo(1);
+    assertThat(inboxService.find(event.eventId())).get()
+        .extracting(InboxEvent::status)
+        .isEqualTo(InboxStatus.PROCESSED);
+  }
+
+  @Test
+  void rollsBackHandlerDatabaseEffectsWhenTheHandlerFails() {
+    InboxEvent event = receivedEvent("{}");
+    inboxService.register(event);
+    inboxService.claim(event.eventId(), NOW, "worker-a", LEASE);
+
+    assertThatThrownBy(() -> inboxService.process(event.eventId(), "worker-a", NOW, () -> {
+      store.addHandlerEffect(event.eventId());
+      throw new EventRetryableException("temporary failure");
+    })).isInstanceOf(EventRetryableException.class);
+
+    assertThat(store.handlerEffectCount(event.eventId())).isZero();
+    assertThat(inboxService.find(event.eventId())).get()
+        .extracting(InboxEvent::status)
+        .isEqualTo(InboxStatus.PROCESSING);
+  }
+
+  @Test
+  void isolatedRetryMetadataSurvivesRollbackAndSuccessfulRetryCommitsExactlyOnce() {
+    InboxEvent event = receivedEvent("{}");
+    inboxService.register(event);
+    inboxService.claim(event.eventId(), NOW, "worker-a", LEASE);
+
+    assertThatThrownBy(() -> inboxService.process(event.eventId(), "worker-a", NOW, () -> {
+      store.addHandlerEffect(event.eventId());
+      throw new EventRetryableException("temporary failure");
+    })).isInstanceOf(EventRetryableException.class);
+    inboxService.markRetryPending(
+        event.eventId(),
+        "worker-a",
+        1,
+        NOW,
+        NOW,
+        "temporary failure"
+    );
+
+    assertThat(inboxService.find(event.eventId())).get().satisfies(retry -> {
+      assertThat(retry.status()).isEqualTo(InboxStatus.RETRY_PENDING);
+      assertThat(retry.attemptCount()).isEqualTo(1);
+      assertThat(retry.lastError()).isEqualTo("temporary failure");
+    });
+    InboxRetryResult retry = retryDispatcher(
+        message -> store.addHandlerEffect(message.eventId()),
+        policy(true)
+    ).dispatch(1);
+
+    assertThat(retry.processed()).isEqualTo(1);
+    assertThat(store.handlerEffectCount(event.eventId())).isEqualTo(1);
+    assertThat(inboxService.find(event.eventId())).get()
+        .extracting(InboxEvent::status)
+        .isEqualTo(InboxStatus.PROCESSED);
   }
 
   @Test
@@ -776,6 +844,26 @@ class InboxServiceImplTest {
     @Transactional
     public void clear() {
       entityManager.createQuery("delete from InboxEventEntity").executeUpdate();
+      entityManager.createNativeQuery("delete from handler_effect").executeUpdate();
+    }
+
+    @Transactional
+    public void createHandlerEffects() {
+      entityManager.createNativeQuery(
+          "create table if not exists handler_effect (event_id varchar(255) primary key)"
+      ).executeUpdate();
+    }
+
+    public void addHandlerEffect(EventId eventId) {
+      entityManager.createNativeQuery("insert into handler_effect (event_id) values (:eventId)")
+          .setParameter("eventId", eventId.value())
+          .executeUpdate();
+    }
+
+    public long handlerEffectCount(EventId eventId) {
+      return ((Number) entityManager.createNativeQuery(
+          "select count(*) from handler_effect where event_id = :eventId"
+      ).setParameter("eventId", eventId.value()).getSingleResult()).longValue();
     }
   }
 }

@@ -16,10 +16,24 @@ public record BrokerMessage(
     Instant timestamp,
     String source,
     String correlationId,
+    String orderingKey,
     String target,
     SerializedPayload payload
 )
 {
+
+  public BrokerMessage(
+      EventId eventId,
+      String eventType,
+      Instant timestamp,
+      String source,
+      String correlationId,
+      String target,
+      SerializedPayload payload
+  )
+  {
+    this(eventId, eventType, timestamp, source, correlationId, null, target, payload);
+  }
 
   public BrokerMessage {
     Objects.requireNonNull(
@@ -42,6 +56,9 @@ public record BrokerMessage(
         target,
         "target"
     );
+    if (orderingKey != null && orderingKey.isBlank()) {
+      throw new IllegalArgumentException("orderingKey must not be blank when configured");
+    }
     Objects.requireNonNull(
         payload,
         "payload must not be null"

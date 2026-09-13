@@ -1,6 +1,7 @@
 package com.czetsuyatech.nerv.event.persistence.service.impl;
 
 import com.czetsuyatech.nerv.event.core.inbox.InboxEvent;
+import com.czetsuyatech.nerv.event.core.inbox.InboxCompletionException;
 import com.czetsuyatech.nerv.event.core.inbox.InboxRegistration;
 import com.czetsuyatech.nerv.event.core.inbox.InboxService;
 import com.czetsuyatech.nerv.event.core.inbox.InboxStatus;
@@ -195,6 +196,59 @@ public class InboxServiceImpl implements InboxService {
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void markProcessed(
+      EventId eventId,
+      String owner,
+      Instant processedAt
+  ) {
+    String eventIdValue = eventIdValue(eventId);
+    requireNonBlank(
+        owner,
+        "owner"
+    );
+    Objects.requireNonNull(
+        processedAt,
+        "processedAt must not be null"
+    );
+    assertTransitioned(
+        entityRepository.markProcessed(
+            eventIdValue,
+            owner,
+            InboxStatus.PROCESSED,
+            InboxStatus.PROCESSING,
+            processedAt
+        ),
+        eventId,
+        owner,
+        InboxStatus.PROCESSING,
+        InboxStatus.PROCESSED
+    );
+    log.debug(
+        "Inbox event marked processed eventId={} owner={}",
+        eventIdValue,
+        owner
+    );
+  }
+
+  @Override
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void process(
+      EventId eventId,
+      String owner,
+      Instant processedAt,
+      Runnable handler
+  ) {
+    Objects.requireNonNull(
+        handler,
+        "handler must not be null"
+    ).run();
+    try {
+      markProcessedInCurrentTransaction(eventId, owner, processedAt);
+    } catch (RuntimeException exception) {
+      throw new InboxCompletionException(exception);
+    }
+  }
+
+  private void markProcessedInCurrentTransaction(
       EventId eventId,
       String owner,
       Instant processedAt

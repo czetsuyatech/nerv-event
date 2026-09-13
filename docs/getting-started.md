@@ -4,7 +4,7 @@ This guide follows the runnable [`nerv-event-spring-boot-demo`](../../nerv-examp
 
 1. Add `com.czetsuyatech.nerv:nerv-event-spring-boot-starter` as shown in the [README](../README.md#installation).
 2. Configure a PostgreSQL `DataSource` and use `spring.jpa.hibernate.ddl-auto=validate` in deployed environments.
-3. Apply `001-create-outbox.sql` through `005-add-outbox-claim-version.sql` from `nerv-event-persistence-jpa/src/main/resources/META-INF/nerv-event/db/postgresql/migration/` through your application-owned migration process.
+3. Apply `001-create-outbox.sql` through `006-add-outbox-ordering-key.sql` from `nerv-event-persistence-jpa/src/main/resources/META-INF/nerv-event/db/postgresql/migration/` through your application-owned migration process.
 4. Enable one broker and map a logical destination:
 
 ```yaml
@@ -21,7 +21,7 @@ nerv:
           group-id: orders
 ```
 
-5. Register an Outbox `RetryPolicy`. This is currently an application-supplied extension point; without it, the starter does not create an Outbox dispatcher:
+5. Register an Outbox `RetryPolicy`. This is an application-supplied extension point; when Outbox publishing is available, startup fails without a complete dispatcher or a custom `OutboxDispatcher`. Consumer-only services can set `nerv.event.outbox.enabled=false`:
 
 ```java
 @Bean

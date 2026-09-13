@@ -56,6 +56,9 @@ public class OutboxEventEntity {
   @Column(name = "destination", nullable = false, length = 512)
   private String destination;
 
+  @Column(name = "ordering_key", length = 512)
+  private String orderingKey;
+
   /**
    * PostgreSQL TEXT keeps serialized payloads readable and avoids Large Object/OID storage.
    */

@@ -6,7 +6,7 @@ not discovered automatically by Flyway. Execute them once, in lexical order, usi
 application's migration process. Nerv Event never executes them and has no Flyway or Liquibase
 runtime dependency.
 
-For a new database, execute `001` through `005`. The tables are `nerv_outbox_event`,
+For a new database, execute `001` through `006`. The tables are `nerv_outbox_event`,
 `nerv_inbox_event`, and `nerv_event_trace_context`; no PostgreSQL schema is hard-coded.
 
 Migration files are immutable once released. Later schema changes must be represented by a new,
@@ -18,3 +18,4 @@ The indexes support claims and lease recovery (`status` with `available_at` or l
 successful-record retention (`status` with published/processed time), EventId lookup, and status-filtered
 operations pages ordered by update time. The trace-context primary key supports lookup and orphan cleanup.
 The sidecar intentionally has no foreign key: one EventId can be represented by several Outbox rows.
+Migration `006` adds the nullable Outbox `ordering_key` and an index used to prevent later same-key rows from being claimed before their predecessors complete.

@@ -8,6 +8,7 @@ Durations use Spring Boot duration syntax (`1s`, `30s`, `30m`, `30d`). Maps are 
 | --- | --- | --- |
 | `nerv.event.destinations.<name>.broker` | required | Broker ID, currently `kafka` or `sqs`. |
 | `nerv.event.destinations.<name>.target` | required | Broker-specific target: Kafka topic or configured SQS destination name. |
+| `nerv.event.outbox.enabled` | `true` | Enables Outbox publication infrastructure. Set `false` for consumer-only services. Enabled publishing with an `OutboxService` fails startup unless a functional default or custom dispatcher exists. |
 | `nerv.event.dispatcher.enabled` | `true` | Enables Outbox dispatcher. |
 | `.batch-size` | `100` | Rows claimed per dispatch cycle. Size this from database and broker load testing. |
 | `.lease-duration` | `2m` | Outbox processing lease. Set it above worst-case claimed-batch processing time. |
@@ -70,3 +71,5 @@ Durations use Spring Boot duration syntax (`1s`, `30s`, `30m`, `30d`). Maps are 
 | `.payload.enabled` | `false` | Include stored payload in detail responses only. |
 
 The full runnable configuration is in the [demo](../../nerv-examples/nerv-event-spring-boot-demo/src/main/resources/application.yml).
+
+Polling jitter uses `ThreadLocalRandom` from the standard `java.base` module. Minimal/custom Java 21 runtime images need no additional random-generator provider module for NERV schedulers.

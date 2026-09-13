@@ -6,7 +6,7 @@
 
 Publishing directly to a broker from a business transaction creates a failure window: the database can commit while the broker send fails, or the broker can receive an event while the database rolls back. `nerv-event` writes an Outbox record in the same transaction as the business update and sends it later. On the consumer side it persists an Inbox record before acknowledging the broker message.
 
-Key capabilities include transactional Outbox publication, durable Inbox processing, Kafka and SQS adapters, multiple SQS clients/accounts, configuration-driven broker consumers, broker-neutral `EventHandler`s, database-backed retry, `EventRetryableException`, PostgreSQL migrations, observability, operations/manual recovery, retention, and multi-pod-safe claims with Outbox fencing tokens.
+Key capabilities include transactional Outbox publication, atomic database-local Inbox handling, optional aggregate ordering keys, Kafka and SQS adapters, database-backed retry, PostgreSQL migrations, observability, operations/manual recovery, retention, and multi-pod-safe claims with Outbox fencing tokens.
 
 ## Installation
 
@@ -23,7 +23,7 @@ For normal Spring Boot applications, add the public starter:
 </dependency>
 ```
 
-The starter brings Spring integration, JPA persistence, and the Kafka and SQS adapters. Kafka and SQS are inactive until `nerv.event.kafka.enabled=true` and/or `nerv.event.sqs.enabled=true`. The current starter does not provide an Outbox `RetryPolicy`; applications must register one before the Outbox dispatcher is created. `nerv-event-operations` and `nerv-event-operations-web` are intentional optional dependencies; the web module is not part of the starter. Observability contracts are currently transitively present through the JPA implementation; Micrometer/tracing integrations still back off when their prerequisites are absent.
+The starter brings Spring integration, JPA persistence, and the Kafka and SQS adapters. Kafka and SQS are inactive until `nerv.event.kafka.enabled=true` and/or `nerv.event.sqs.enabled=true`. Outbox publishing is enabled by default; startup fails if an `OutboxService` can accept publications but no functional dispatcher is available. Register the application-specific Outbox `RetryPolicy`, supply a custom `OutboxDispatcher`, or explicitly set `nerv.event.outbox.enabled=false`.
 
 ## Quick Start
 
@@ -62,9 +62,12 @@ void createOrder(Order order) {
           .payload(new OrderCreated(order.id()))
           .build())
       .destination(new Destination("orders"))
+      .orderingKey(order.id().toString())
       .build());
 }
 ```
+
+The ordering key is optional. Same-key Outbox rows are dispatched in persisted sequence; Kafka uses it as the record key and SQS FIFO producers use it as the message group ID. Standard SQS queues provide no ordering guarantee. Polling jitter uses Java's standard `java.base` runtime and requires no optional random-provider module.
 
 See [Getting Started](docs/getting-started.md), [Publishing](docs/publishing.md), and [Consuming](docs/consuming.md) for the complete path.
 

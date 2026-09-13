@@ -5,6 +5,7 @@ import com.czetsuyatech.nerv.event.core.consumer.ConsumerMessage;
 import com.czetsuyatech.nerv.event.core.consumer.DefaultInboxFailureClassifier;
 import com.czetsuyatech.nerv.event.core.consumer.InboxFailureClassifier;
 import com.czetsuyatech.nerv.event.core.inbox.InboxEvent;
+import com.czetsuyatech.nerv.event.core.inbox.InboxCompletionException;
 import com.czetsuyatech.nerv.event.core.inbox.InboxRegistration;
 import com.czetsuyatech.nerv.event.core.inbox.InboxService;
 import com.czetsuyatech.nerv.event.core.inbox.InboxStatus;
@@ -229,13 +230,27 @@ public class KafkaConsumerAdapter implements AcknowledgingMessageListener<String
           processingOwner,
           claimed.attemptCount()
       );
-      consumerDispatcher.dispatch(message);
+      inboxService.process(
+          message.eventId(),
+          processingOwner,
+          clock.instant(),
+          () -> consumerDispatcher.dispatch(message)
+      );
       observe(
           metrics -> metrics.handlerExecutionCompleted(
               ConsumerHandlerResult.SUCCESS,
               Duration.ofNanos(System.nanoTime() - handlerStartedAt)
           )
       );
+    } catch (InboxCompletionException exception) {
+      observe(
+          metrics -> metrics.handlerExecutionCompleted(
+              ConsumerHandlerResult.SUCCESS,
+              Duration.ofNanos(System.nanoTime() - handlerStartedAt)
+          )
+      );
+      observe(metrics -> metrics.outcome(ConsumerOutcome.UNRESOLVED));
+      throw new KafkaConsumerProcessingException(record, message, "MARK_PROCESSED", exception);
     } catch (RuntimeException exception) {
       observe(
           metrics -> metrics.handlerExecutionCompleted(
@@ -261,7 +276,7 @@ public class KafkaConsumerAdapter implements AcknowledgingMessageListener<String
         record.offset(),
         processingOwner
     );
-    markProcessedThenAcknowledge(
+    acknowledgeProcessed(
         record,
         message,
         claimed,
@@ -386,43 +401,18 @@ public class KafkaConsumerAdapter implements AcknowledgingMessageListener<String
     }
   }
 
-  private void markProcessedThenAcknowledge(
+  private void acknowledgeProcessed(
       ConsumerRecord<String, String> record,
       ConsumerMessage message,
       InboxEvent claimed,
       Acknowledgment acknowledgment
   ) {
-    try {
-      inboxService.markProcessed(
-          message.eventId(),
-          processingOwner,
-          clock.instant()
-      );
-      log.debug(
-          "Inbox event processed eventId={} eventType={} attemptCount={}",
-          message.eventId().value(),
-          message.eventType(),
-          claimed.attemptCount()
-      );
-    } catch (RuntimeException exception) {
-      observe(metrics -> metrics.outcome(ConsumerOutcome.UNRESOLVED));
-      log.error(
-          "Event handler completed but inbox PROCESSED transition could not be persisted stage=MARK_PROCESSED eventId={} eventType={} topic={} partition={} offset={} owner={}",
-          message.eventId().value(),
-          message.eventType(),
-          record.topic(),
-          record.partition(),
-          record.offset(),
-          processingOwner,
-          exception
-      );
-      throw new KafkaConsumerProcessingException(
-          record,
-          message,
-          "MARK_PROCESSED",
-          exception
-      );
-    }
+    log.debug(
+        "Inbox event processed eventId={} eventType={} attemptCount={}",
+        message.eventId().value(),
+        message.eventType(),
+        claimed.attemptCount()
+    );
     observe(metrics -> metrics.outcome(ConsumerOutcome.PROCESSED));
     acknowledge(
         record,

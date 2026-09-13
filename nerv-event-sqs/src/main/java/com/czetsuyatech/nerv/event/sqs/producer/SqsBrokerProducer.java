@@ -81,13 +81,7 @@ public final class SqsBrokerProducer implements BrokerProducer {
               : client.getQueueUrl(GetQueueUrlRequest.builder().queueName(destination.queue()).build())
                   .thenApply(response -> response.queueUrl());
       SendMessageResponse response = queueUrl.thenCompose(
-          url -> client.sendMessage(
-              SendMessageRequest.builder()
-                  .queueUrl(url)
-                  .messageBody(message.payload().value())
-                  .messageAttributes(attributes(message))
-                  .build()
-          )
+          url -> client.sendMessage(request(message, destination, url))
       )
           .get(
               sendTimeout.toMillis(),
@@ -189,6 +183,27 @@ public final class SqsBrokerProducer implements BrokerProducer {
             }
         );
     return Map.copyOf(values);
+  }
+
+  private static SendMessageRequest request(
+      BrokerMessage message,
+      SqsDestination destination,
+      String queueUrl
+  ) {
+    SendMessageRequest.Builder request = SendMessageRequest.builder()
+        .queueUrl(queueUrl)
+        .messageBody(message.payload().value())
+        .messageAttributes(attributes(message));
+    if (message.orderingKey() != null && isFifo(destination.queue())) {
+      request.messageGroupId(message.orderingKey()).messageDeduplicationId(message.eventId().value());
+    }
+    return request.build();
+  }
+
+  private static boolean isFifo(String queue) {
+    int queryIndex = queue.indexOf('?');
+    String queueWithoutQuery = queryIndex < 0 ? queue : queue.substring(0, queryIndex);
+    return queueWithoutQuery.endsWith(".fifo");
   }
 
   private static void put(

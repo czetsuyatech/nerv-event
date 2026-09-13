@@ -13,9 +13,9 @@ final class PaymentRequestedHandler implements EventHandler<PaymentRequested> {
 }
 ```
 
-Configure Kafka or SQS consumers under `nerv.event`; NERV creates the adapter containers. Do **not** add `@KafkaListener` or `@SqsListener` for this flow. The adapter deserializes the broker message, registers/claims the durable Inbox row, invokes the matching handler, persists the terminal or retry state, then acknowledges/deletes the broker message only after a durable result.
+Configure Kafka or SQS consumers under `nerv.event`; NERV creates the adapter containers. Do **not** add `@KafkaListener` or `@SqsListener` for this flow. The adapter deserializes the broker message and registers/claims the durable Inbox row using short transactions. It then opens one processing transaction that invokes the handler and marks the Inbox row `PROCESSED`. Database work performed through the same transaction manager commits or rolls back with Inbox completion. After a handler failure rolls that transaction back, NERV records `RETRY_PENDING` or `FAILED` in the existing isolated failure transaction. Broker acknowledgement/delete happens only after a durable result.
 
-Handlers should use their own `@Transactional` boundary when their business work requires one. No NERV database transaction is deliberately held across broker or other network I/O.
+Handlers may use normal participating `@Transactional` methods for database work. Do not use independent transactions if that work must be atomic with Inbox completion. External calls—HTTP, payment providers, email, and brokers—are not part of the database transaction and still require idempotency. NERV does not hold the processing transaction around claiming, polling, or broker acknowledgement.
 
 ## Handler interception
 

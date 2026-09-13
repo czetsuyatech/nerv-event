@@ -110,6 +110,7 @@ public final class OutboxDispatcher {
               outboxEvent.event().timestamp(),
               outboxEvent.event().source(),
               outboxEvent.event().correlationId(),
+              outboxEvent.orderingKey(),
               route.physicalTarget(),
               serializedEvent
           )

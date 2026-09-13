@@ -16,6 +16,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class NervEventProperties {
 
   private Dispatcher dispatcher = new Dispatcher();
+  private Outbox outbox = new Outbox();
   private Inbox inbox = new Inbox();
   private Retention retention = new Retention();
   private Scheduler scheduler = new Scheduler();
@@ -30,6 +31,13 @@ public class NervEventProperties {
     retention.validate();
     scheduler.validate();
     destinations.forEach(this::validateDestination);
+  }
+
+  @Getter
+  @Setter
+  public static class Outbox {
+    /** Whether the starter exposes the durable Outbox publication entry point. */
+    private boolean enabled = true;
   }
 
   @Getter
