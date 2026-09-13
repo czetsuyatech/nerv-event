@@ -56,6 +56,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Condition;
+import org.springframework.context.annotation.ConditionContext;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import tools.jackson.databind.ObjectMapper;
@@ -116,11 +120,7 @@ public class NervEventAutoConfiguration {
   @Bean
   @ConditionalOnBean(OutboxService.class)
   @ConditionalOnMissingBean(EventPublisher.class)
-  @ConditionalOnProperty(
-      prefix = "nerv.event.outbox",
-      name = "enabled",
-      havingValue = "true",
-      matchIfMissing = true)
+  @Conditional(OutboxPublicationActiveCondition.class)
   EventPublisher eventPublisher(
       OutboxService outboxService,
       OutboxIdGenerator outboxIdGenerator,
@@ -147,13 +147,26 @@ public class NervEventAutoConfiguration {
       ObjectProvider<RetryPolicy> retryPolicy
   ) {
     return () -> {
-      if (!properties.getOutbox().isEnabled()
-          || outboxService.getIfAvailable() == null
-          || eventPublisher.getIfAvailable() == null) {
-        log.info("NERV Event Outbox publishing disabled or unavailable");
+      OutboxService configuredOutboxService = outboxService.getIfAvailable();
+      EventPublisher configuredEventPublisher = eventPublisher.getIfAvailable();
+      OutboxDispatcher configuredOutboxDispatcher = outboxDispatcher.getIfAvailable();
+      RetryPolicy configuredRetryPolicy = retryPolicy.getIfAvailable();
+      Boolean explicitlyEnabled = properties.getOutbox().getEnabled();
+      if (Boolean.FALSE.equals(explicitlyEnabled)) {
+        log.info("NERV Event Outbox publication is explicitly disabled");
         return;
       }
-      if (outboxDispatcher.getIfAvailable() != null) {
+      boolean publicationActive = configuredOutboxService != null
+          && (Boolean.TRUE.equals(explicitlyEnabled)
+              || configuredEventPublisher != null
+              || configuredOutboxDispatcher != null
+              || configuredRetryPolicy != null
+              || !properties.getDestinations().isEmpty());
+      if (!publicationActive) {
+        log.info("NERV Event Outbox publication is inactive; Inbox-only startup requires no Outbox opt-out");
+        return;
+      }
+      if (configuredOutboxDispatcher != null) {
         log.info(
             "NERV Event Outbox publishing configured dispatcherEnabled={} batchSize={} leaseDuration={}",
             properties.getDispatcher().isEnabled(),
@@ -162,7 +175,7 @@ public class NervEventAutoConfiguration {
         );
         return;
       }
-      if (retryPolicy.getIfAvailable() == null) {
+      if (configuredRetryPolicy == null) {
         throw new IllegalStateException(
             "NERV Event Outbox publishing is enabled but no dispatch RetryPolicy bean is configured. "
                 + "Register a com.czetsuyatech.nerv.event.core.retry.RetryPolicy bean or set "
@@ -175,6 +188,27 @@ public class NervEventAutoConfiguration {
               + "nerv.event.outbox.enabled=false."
       );
     };
+  }
+
+  static final class OutboxPublicationActiveCondition implements Condition {
+    @Override
+    public boolean matches(
+        ConditionContext context,
+        AnnotatedTypeMetadata metadata
+    ) {
+      Boolean enabled = context.getEnvironment().getProperty("nerv.event.outbox.enabled", Boolean.class);
+      if (Boolean.FALSE.equals(enabled)) {
+        return false;
+      }
+      if (Boolean.TRUE.equals(enabled)) {
+        return true;
+      }
+      if (context.getBeanFactory() == null) {
+        return false;
+      }
+      return context.getBeanFactory().getBeanNamesForType(RetryPolicy.class, false, false).length > 0
+          || context.getBeanFactory().getBeanNamesForType(OutboxDispatcher.class, false, false).length > 0;
+    }
   }
 
   @Bean

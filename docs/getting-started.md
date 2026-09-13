@@ -21,7 +21,7 @@ nerv:
           group-id: orders
 ```
 
-5. Register an Outbox `RetryPolicy`. This is an application-supplied extension point; when Outbox publishing is available, startup fails without a complete dispatcher or a custom `OutboxDispatcher`. Consumer-only services can set `nerv.event.outbox.enabled=false`:
+5. If the application publishes events, register an Outbox `RetryPolicy`. This application-supplied extension point activates Outbox publication; startup then fails without a complete dispatcher or a custom `OutboxDispatcher`. Inbox-only services need no Outbox setting, while `nerv.event.outbox.enabled=false` is available as an explicit opt-out:
 
 ```java
 @Bean

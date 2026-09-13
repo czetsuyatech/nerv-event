@@ -4,7 +4,7 @@ Use PostgreSQL, apply the canonical migrations through deployment tooling, and r
 
 ## Guarantees and transactions
 
-NERV provides **at-least-once delivery**, not distributed exactly-once processing. The producer's business update and Outbox save are one application transaction. Outbox claims and marks use short independent transactions; broker/network I/O is outside them. Inbox registration and claim are short transactions, followed by one processing transaction containing the handler's database-local work and the `PROCESSED` transition. Handler failure rolls both back before retry/failure metadata is recorded separately. Register a core `RetryPolicy` bean or a custom `OutboxDispatcher`; startup fails instead of silently accepting Outbox rows without a dispatch path. Consumer-only services should set `nerv.event.outbox.enabled=false`.
+NERV provides **at-least-once delivery**, not distributed exactly-once processing. The producer's business update and Outbox save are one application transaction. Outbox claims and marks use short independent transactions; broker/network I/O is outside them. Inbox registration and claim are short transactions, followed by one processing transaction containing the handler's database-local work and the `PROCESSED` transition. Handler failure rolls both back before retry/failure metadata is recorded separately. Registering a core `RetryPolicy`, a custom `OutboxDispatcher`, or an outbound destination activates Outbox publication; startup then fails instead of silently accepting Outbox rows without a dispatch path. Consumer-only services need no Outbox property. They may set `nerv.event.outbox.enabled=false` as an explicit opt-out.
 
 Important windows remain:
 

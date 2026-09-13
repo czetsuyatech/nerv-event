@@ -23,7 +23,7 @@ For normal Spring Boot applications, add the public starter:
 </dependency>
 ```
 
-The starter brings Spring integration, JPA persistence, and the Kafka and SQS adapters. Kafka and SQS are inactive until `nerv.event.kafka.enabled=true` and/or `nerv.event.sqs.enabled=true`. Outbox publishing is enabled by default; startup fails if an `OutboxService` can accept publications but no functional dispatcher is available. Register the application-specific Outbox `RetryPolicy`, supply a custom `OutboxDispatcher`, or explicitly set `nerv.event.outbox.enabled=false`.
+The starter brings Spring integration, JPA persistence, and the Kafka and SQS adapters. Kafka and SQS are inactive until `nerv.event.kafka.enabled=true` and/or `nerv.event.sqs.enabled=true`. Outbox publication is auto-detected from an application `RetryPolicy`, custom `OutboxDispatcher`, configured destination, or `nerv.event.outbox.enabled=true`. Inbox-only applications need no Outbox setting. Once publication is active, startup fails if an `OutboxService` can accept publications but no functional dispatcher is available. `nerv.event.outbox.enabled=false` remains available as an explicit opt-out.
 
 ## Quick Start
 

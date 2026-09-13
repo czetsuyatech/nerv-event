@@ -53,10 +53,11 @@ class NervEventAutoConfigurationTest {
       .withConfiguration(AutoConfigurations.of(NervEventAutoConfiguration.class));
 
   @Test
-  void autoConfiguresEventPublisherWhenAnOutboxRepositoryExists() {
+  void activeDefaultOutboxConfiguresThePublisherAndDispatcher() {
     contextRunner.withUserConfiguration(CoreDispatcherDependenciesConfiguration.class).run(context -> {
       assertThat(context).hasSingleBean(EventPublisher.class);
       assertThat(context.getBean(EventPublisher.class)).isInstanceOf(DefaultEventPublisher.class);
+      assertThat(context).hasSingleBean(OutboxDispatcher.class);
     });
   }
 
@@ -87,12 +88,38 @@ class NervEventAutoConfigurationTest {
   @Test
   void failsFastWhenOutboxPublishingHasNoRetryPolicy() {
     contextRunner.withUserConfiguration(OutboxRepositoryConfiguration.class)
+        .withPropertyValues("nerv.event.outbox.enabled=true")
         .run(
             context -> assertThat(context)
                 .hasFailed()
                 .getFailure()
                 .hasMessageContaining("no dispatch RetryPolicy bean")
                 .hasMessageContaining("nerv.event.outbox.enabled=false")
+        );
+  }
+
+  @Test
+  void consumerOnlyInstallationStartsWithoutAnOutboxOptOut() {
+    contextRunner.withUserConfiguration(OutboxRepositoryConfiguration.class).run(context -> {
+      assertThat(context).hasNotFailed();
+      assertThat(context).doesNotHaveBean(EventPublisher.class);
+      assertThat(context).doesNotHaveBean(OutboxDispatcher.class);
+      assertThat(context).doesNotHaveBean(OutboxDispatchScheduler.class);
+    });
+  }
+
+  @Test
+  void configuredDestinationActivatesFailFastOutboxValidation() {
+    contextRunner.withUserConfiguration(OutboxRepositoryConfiguration.class)
+        .withPropertyValues(
+            "nerv.event.destinations.orders.broker=kafka",
+            "nerv.event.destinations.orders.target=order-events"
+        )
+        .run(
+            context -> assertThat(context)
+                .hasFailed()
+                .getFailure()
+                .hasMessageContaining("no dispatch RetryPolicy bean")
         );
   }
 
@@ -116,6 +143,8 @@ class NervEventAutoConfigurationTest {
     ).run(context -> {
       assertThat(context).hasNotFailed();
       assertThat(context).hasSingleBean(OutboxDispatcher.class);
+      assertThat(context).hasSingleBean(EventPublisher.class);
+      assertThat(context.getBean(EventPublisher.class)).isInstanceOf(DefaultEventPublisher.class);
     });
   }
 

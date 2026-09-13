@@ -36,8 +36,8 @@ public class NervEventProperties {
   @Getter
   @Setter
   public static class Outbox {
-    /** Whether the starter exposes the durable Outbox publication entry point. */
-    private boolean enabled = true;
+    /** Whether Outbox publication is explicitly enabled or disabled; {@code null} enables auto-detection. */
+    private Boolean enabled;
   }
 
   @Getter
