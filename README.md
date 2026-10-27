@@ -47,7 +47,7 @@ nerv:
       enabled: true
 ```
 
-Inside a business transaction, build an `EventMessage` and publish an `EventPublication` to the logical destination. Implement `EventHandler<T>` for inbound event types. You do **not** need NERV component scanning, `@EnableJpaRepositories`, `@EntityScan`, `@KafkaListener`, or `@SqsListener`.
+Inside a business transaction, build an `EventMessage` and publish an `EventPublication` to the logical destination. Implement `EventHandler<T>` for inbound event types. You do **not** need NERV component scanning, `@EnableJpaRepositories`, `@EntityScan`, `@EnableNervEventJpaRepositories`, `@KafkaListener`, or `@SqsListener`. Applications that define their own `@EntityScan` or `@EnableJpaRepositories` retain those consumer packages; the starter independently adds the NERV entities and repositories.
 
 ```java
 @Transactional

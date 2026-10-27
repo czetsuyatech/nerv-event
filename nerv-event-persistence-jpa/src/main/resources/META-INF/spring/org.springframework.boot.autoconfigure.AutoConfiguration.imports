@@ -1,2 +1,2 @@
-com.czetsuyatech.nerv.event.persistence.autoconfigure.NervEventJpaRepositoryPackageAutoConfiguration
+com.czetsuyatech.nerv.event.persistence.autoconfigure.NervEventJpaEntityScanAutoConfiguration
 com.czetsuyatech.nerv.event.persistence.autoconfigure.NervEventJpaAutoConfiguration

@@ -1,11 +1,11 @@
 package com.czetsuyatech.nerv.event.starter.customconsumer;
 
-import com.czetsuyatech.nerv.event.persistence.persistence.config.EnableNervEventJpaRepositories;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @SpringBootApplication
+@EntityScan(basePackageClasses = CustomOrder.class)
 @EnableJpaRepositories(basePackageClasses = CustomOrderRepository.class)
-@EnableNervEventJpaRepositories
 public class CustomJpaConsumerApplication {
 }

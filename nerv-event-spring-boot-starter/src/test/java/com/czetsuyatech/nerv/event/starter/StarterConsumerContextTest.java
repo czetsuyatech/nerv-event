@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.czetsuyatech.nerv.event.core.inbox.InboxService;
 import com.czetsuyatech.nerv.event.core.outbox.OutboxService;
 import com.czetsuyatech.nerv.event.core.retry.RetryPolicy;
+import com.czetsuyatech.nerv.event.persistence.persistence.entity.InboxEventEntity;
 import com.czetsuyatech.nerv.event.persistence.persistence.entity.OutboxEventEntity;
+import com.czetsuyatech.nerv.event.persistence.persistence.entity.TraceContextEntity;
 import com.czetsuyatech.nerv.event.persistence.persistence.repository.InboxEventRepository;
 import com.czetsuyatech.nerv.event.persistence.persistence.repository.OutboxEventRepository;
 import com.czetsuyatech.nerv.event.persistence.persistence.repository.TraceContextEntityRepository;
@@ -28,6 +30,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.ApplicationContext;
 
 /**
  * Exercises the dependency set a normal application receives from the one public starter.
@@ -57,6 +60,7 @@ class StarterConsumerContextTest {
   private final InboxOperationService inboxOperationService;
   private final EntityManagerFactory entityManagerFactory;
   private final ConfigurableListableBeanFactory beanFactory;
+  private final ApplicationContext applicationContext;
 
   @Autowired
   StarterConsumerContextTest(
@@ -72,7 +76,8 @@ class StarterConsumerContextTest {
       OutboxOperationService outboxOperationService,
       InboxOperationService inboxOperationService,
       EntityManagerFactory entityManagerFactory,
-      ConfigurableListableBeanFactory beanFactory
+      ConfigurableListableBeanFactory beanFactory,
+      ApplicationContext applicationContext
   )
   {
     this.eventPublisher = eventPublisher;
@@ -88,6 +93,7 @@ class StarterConsumerContextTest {
     this.inboxOperationService = inboxOperationService;
     this.entityManagerFactory = entityManagerFactory;
     this.beanFactory = beanFactory;
+    this.applicationContext = applicationContext;
   }
 
   @Test
@@ -105,22 +111,26 @@ class StarterConsumerContextTest {
     assertThat(outboxEntityRepository).isNotNull();
     assertThat(inboxEntityRepository).isNotNull();
     assertThat(traceContextEntityRepository).isNotNull();
+    assertThat(applicationContext.getBeanNamesForType(OrderRepository.class)).hasSize(1);
+    assertThat(applicationContext.getBeanNamesForType(OutboxEventRepository.class)).hasSize(1);
+    assertThat(applicationContext.getBeanNamesForType(InboxEventRepository.class)).hasSize(1);
+    assertThat(applicationContext.getBeanNamesForType(TraceContextEntityRepository.class)).hasSize(1);
     assertThat(outboxOperationRepository).isNotNull();
     assertThat(inboxOperationRepository).isNotNull();
     assertThat(outboxOperationService).isNotNull();
     assertThat(inboxOperationService).isNotNull();
     assertThat(AutoConfigurationPackages.get(beanFactory))
-        .contains(
-            "com.czetsuyatech.nerv.event.starter.consumer",
-            "com.czetsuyatech.nerv.event.persistence"
-        );
+        .contains("com.czetsuyatech.nerv.event.starter.consumer")
+        .doesNotContain("com.czetsuyatech.nerv.event.persistence");
     var entityClasses = entityManagerFactory.getMetamodel()
         .getEntities()
         .stream()
         .map(entityType -> (Class<?>) entityType.getJavaType())
         .toList();
     assertThat(entityClasses.contains(Order.class)).isTrue();
+    assertThat(entityClasses.contains(InboxEventEntity.class)).isTrue();
     assertThat(entityClasses.contains(OutboxEventEntity.class)).isTrue();
+    assertThat(entityClasses.contains(TraceContextEntity.class)).isTrue();
   }
 
   @TestConfiguration(proxyBeanMethods = false)

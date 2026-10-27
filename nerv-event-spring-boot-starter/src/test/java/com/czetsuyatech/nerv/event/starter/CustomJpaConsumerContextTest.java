@@ -2,14 +2,18 @@ package com.czetsuyatech.nerv.event.starter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.czetsuyatech.nerv.event.persistence.persistence.entity.InboxEventEntity;
 import com.czetsuyatech.nerv.event.persistence.persistence.entity.OutboxEventEntity;
+import com.czetsuyatech.nerv.event.persistence.persistence.entity.TraceContextEntity;
 import com.czetsuyatech.nerv.event.persistence.persistence.repository.InboxEventRepository;
 import com.czetsuyatech.nerv.event.persistence.persistence.repository.OutboxEventRepository;
+import com.czetsuyatech.nerv.event.persistence.persistence.repository.TraceContextEntityRepository;
 import com.czetsuyatech.nerv.event.starter.customconsumer.CustomOrder;
 import com.czetsuyatech.nerv.event.starter.customconsumer.CustomOrderRepository;
 import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
@@ -30,20 +34,26 @@ class CustomJpaConsumerContextTest {
   private final CustomOrderRepository customOrderRepository;
   private final OutboxEventRepository outboxEntityRepository;
   private final InboxEventRepository inboxEntityRepository;
+  private final TraceContextEntityRepository traceContextEntityRepository;
   private final EntityManagerFactory entityManagerFactory;
+  private final ApplicationContext applicationContext;
 
   @Autowired
   CustomJpaConsumerContextTest(
       CustomOrderRepository customOrderRepository,
       OutboxEventRepository outboxEntityRepository,
       InboxEventRepository inboxEntityRepository,
-      EntityManagerFactory entityManagerFactory
+      TraceContextEntityRepository traceContextEntityRepository,
+      EntityManagerFactory entityManagerFactory,
+      ApplicationContext applicationContext
   )
   {
     this.customOrderRepository = customOrderRepository;
     this.outboxEntityRepository = outboxEntityRepository;
     this.inboxEntityRepository = inboxEntityRepository;
+    this.traceContextEntityRepository = traceContextEntityRepository;
     this.entityManagerFactory = entityManagerFactory;
+    this.applicationContext = applicationContext;
   }
 
   @Test
@@ -51,12 +61,19 @@ class CustomJpaConsumerContextTest {
     assertThat(customOrderRepository).isNotNull();
     assertThat(outboxEntityRepository).isNotNull();
     assertThat(inboxEntityRepository).isNotNull();
+    assertThat(traceContextEntityRepository).isNotNull();
+    assertThat(applicationContext.getBeanNamesForType(CustomOrderRepository.class)).hasSize(1);
+    assertThat(applicationContext.getBeanNamesForType(OutboxEventRepository.class)).hasSize(1);
+    assertThat(applicationContext.getBeanNamesForType(InboxEventRepository.class)).hasSize(1);
+    assertThat(applicationContext.getBeanNamesForType(TraceContextEntityRepository.class)).hasSize(1);
     var entityClasses = entityManagerFactory.getMetamodel()
         .getEntities()
         .stream()
         .map(entityType -> (Class<?>) entityType.getJavaType())
         .toList();
     assertThat(entityClasses.contains(CustomOrder.class)).isTrue();
+    assertThat(entityClasses.contains(InboxEventEntity.class)).isTrue();
     assertThat(entityClasses.contains(OutboxEventEntity.class)).isTrue();
+    assertThat(entityClasses.contains(TraceContextEntity.class)).isTrue();
   }
 }

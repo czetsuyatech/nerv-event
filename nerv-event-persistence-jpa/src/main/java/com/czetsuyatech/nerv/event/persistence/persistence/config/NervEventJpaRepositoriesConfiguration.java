@@ -5,7 +5,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 /**
- * Spring Data repository configuration for applications that explicitly own repository discovery.
+ * Spring Data repository configuration imported by NERV's JPA auto-configuration independently of consumer repository
+ * discovery.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableJpaRepositories(basePackageClasses = NervEventPersistencePackage.class)
